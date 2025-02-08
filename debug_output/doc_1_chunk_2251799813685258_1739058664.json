@@ -1,0 +1,86 @@
+{
+  "metadata": {
+    "doc_id": 1,
+    "chunk_id": 2251799813685258,
+    "timestamp": "2025-02-08T15:51:04.870256"
+  },
+  "extracted_data": {
+    "entities": [
+      {
+        "name": "RowType",
+        "description": "A type representing an array of objects with string keys and any type of values.",
+        "aliases": [],
+        "category": "Type",
+        "confidence": 1.0
+      },
+      {
+        "name": "database",
+        "description": "A generic representation of a database interface.",
+        "aliases": [],
+        "category": "Software",
+        "confidence": 1.0
+      },
+      {
+        "name": "TableName",
+        "description": "A type representing the name of a table within a database.",
+        "aliases": [
+          "<TABLE_NAME>"
+        ],
+        "category": "Type",
+        "confidence": 1.0
+      },
+      {
+        "name": "TableSchema",
+        "description": "A type representing the schema of a database table, which can vary in structure.",
+        "aliases": [],
+        "category": "Type",
+        "confidence": 1.0
+      },
+      {
+        "name": "table",
+        "description": "A representation of a specific table within a database, used for various table operations.",
+        "aliases": [],
+        "category": "Software",
+        "confidence": 1.0
+      }
+    ],
+    "relationships": [
+      {
+        "source": "database",
+        "target": "RowType",
+        "relation_type": "returns",
+        "description": "The database query returns a RowType.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685258
+      },
+      {
+        "source": "database",
+        "target": "table",
+        "relation_type": "uses",
+        "description": "The database uses a table for various operations such as create, drop, truncate, rename, and insert.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685258
+      },
+      {
+        "source": "table",
+        "target": "TableName",
+        "relation_type": "has_type",
+        "description": "The table has a type of TableName for specifying the table name.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685258
+      },
+      {
+        "source": "table",
+        "target": "TableSchema",
+        "relation_type": "has_type",
+        "description": "The table has a type of TableSchema for specifying the table schema.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685258
+      }
+    ]
+  }
+}

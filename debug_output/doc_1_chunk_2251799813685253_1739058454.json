@@ -1,0 +1,150 @@
+{
+  "metadata": {
+    "doc_id": 1,
+    "chunk_id": 2251799813685253,
+    "timestamp": "2025-02-08T15:47:34.452815"
+  },
+  "extracted_data": {
+    "entities": [
+      {
+        "name": "SingleStore Client",
+        "description": "A package designed for interacting with the SingleStore API in Node.js environments.",
+        "aliases": [
+          "SingleStoreClient"
+        ],
+        "category": "Product",
+        "confidence": 1.0
+      },
+      {
+        "name": "SingleStore API",
+        "description": "API provided by SingleStore for database management and interaction.",
+        "aliases": [],
+        "category": "Technology",
+        "confidence": 1.0
+      },
+      {
+        "name": "Node.js",
+        "description": "A JavaScript runtime built on Chrome's V8 JavaScript engine.",
+        "aliases": [],
+        "category": "Technology",
+        "confidence": 1.0
+      },
+      {
+        "name": "Management API",
+        "description": "API for managing SingleStore functionalities.",
+        "aliases": [],
+        "category": "Technology",
+        "confidence": 1.0
+      },
+      {
+        "name": "AI integration",
+        "description": "Integration of artificial intelligence features.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "API key",
+        "description": "A unique identifier used to authenticate a user, developer, or calling program to an API.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "OpenAI",
+        "description": "An AI research and deployment company.",
+        "aliases": [],
+        "category": "Organization",
+        "confidence": 1.0
+      },
+      {
+        "name": "@singlestore/ai",
+        "description": "A package for integrating custom LLMs with SingleStore.",
+        "aliases": [],
+        "category": "Product",
+        "confidence": 1.0
+      },
+      {
+        "name": "workspaceGroup.get",
+        "description": "A method to get workspace groups with options.",
+        "aliases": [],
+        "category": "Function",
+        "confidence": 1.0
+      },
+      {
+        "name": "workspace group",
+        "description": "A group of workspaces managed within SingleStore.",
+        "aliases": [
+          "workspace group instance"
+        ],
+        "category": "Concept",
+        "confidence": 1.0
+      }
+    ],
+    "relationships": [
+      {
+        "source": "SingleStore Client",
+        "target": "SingleStore API",
+        "relation_type": "interacts_with",
+        "description": "The SingleStore Client is designed for interacting with the SingleStore API.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685253
+      },
+      {
+        "source": "SingleStore Client",
+        "target": "Node.js",
+        "relation_type": "operates_in",
+        "description": "The SingleStore Client operates in Node.js environments.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685253
+      },
+      {
+        "source": "SingleStore Client",
+        "target": "Management API",
+        "relation_type": "provides_access_to",
+        "description": "The SingleStore Client provides access to the Management API.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685253
+      },
+      {
+        "source": "SingleStore Client",
+        "target": "AI integration",
+        "relation_type": "supports",
+        "description": "The SingleStore Client supports AI integration.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685253
+      },
+      {
+        "source": "SingleStore Client",
+        "target": "API key",
+        "relation_type": "utilizes",
+        "description": "The SingleStore Client utilizes an API key for certain functionalities.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685253
+      },
+      {
+        "source": "SingleStore Client",
+        "target": "@singlestore/ai",
+        "relation_type": "can_use",
+        "description": "The SingleStore Client can use the @singlestore/ai package for custom LLM integration.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685253
+      },
+      {
+        "source": "workspaceGroup.get",
+        "target": "workspace group",
+        "relation_type": "manages",
+        "description": "The workspaceGroup.get method is used to manage workspace groups.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685253
+      }
+    ]
+  }
+}

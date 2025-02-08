@@ -1,0 +1,112 @@
+{
+  "metadata": {
+    "doc_id": 1,
+    "chunk_id": 2251799813685260,
+    "timestamp": "2025-02-08T15:49:50.651595"
+  },
+  "extracted_data": {
+    "entities": [
+      {
+        "name": "Table Vector Search",
+        "description": "A method for performing vector searches on tables.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "Create Table Chat Completion",
+        "description": "A method for creating chat completions in tables.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "ChatCompletionTool",
+        "description": "A tool for creating chat completions.",
+        "aliases": [],
+        "category": "Tool",
+        "confidence": 1.0
+      },
+      {
+        "name": "@singlestore/ai/chat-completions",
+        "description": "A library for chat completions in SingleStore.",
+        "aliases": [],
+        "category": "Library",
+        "confidence": 1.0
+      },
+      {
+        "name": "zod",
+        "description": "A validation library.",
+        "aliases": [
+          "z"
+        ],
+        "category": "Library",
+        "confidence": 1.0
+      },
+      {
+        "name": "Column",
+        "description": "A method for managing table columns.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "Billing",
+        "description": "A method for managing billing information.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "Region",
+        "description": "A method for managing regions.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "Team",
+        "description": "A method for managing teams.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "Job",
+        "description": "A method for managing jobs.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "Secret",
+        "description": "A method for managing secrets.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "Stage",
+        "description": "A method for managing stages.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "Storage",
+        "description": "A method for managing storage.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "Connection",
+        "description": "A method for executing custom queries.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      }
+    ],
+    "relationships": []
+  }
+}

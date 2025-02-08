@@ -1,0 +1,208 @@
+{
+  "metadata": {
+    "doc_id": 1,
+    "chunk_id": 2251799813685254,
+    "timestamp": "2025-02-08T15:53:06.969105"
+  },
+  "extracted_data": {
+    "entities": [
+      {
+        "name": "workspace group",
+        "description": "A group of workspaces that can be managed together.",
+        "aliases": [],
+        "category": "Product",
+        "confidence": 1.0
+      },
+      {
+        "name": "delete method",
+        "description": "A method used to delete a workspace group.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "Workspace Group instance",
+        "description": "An instance of a workspace group.",
+        "aliases": [],
+        "category": "Product",
+        "confidence": 1.0
+      },
+      {
+        "name": "force argument",
+        "description": "An optional argument to forcibly delete a workspace group.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "free tier workspace",
+        "description": "A workspace offering with no cost.",
+        "aliases": [],
+        "category": "Product",
+        "confidence": 1.0
+      },
+      {
+        "name": "SSL certificate",
+        "description": "A digital certificate to provide secure connections.",
+        "aliases": [],
+        "category": "Product",
+        "confidence": 1.0
+      },
+      {
+        "name": "includeTerminated",
+        "description": "A parameter to include terminated workspaces in a query.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "select",
+        "description": "A parameter to select specific fields from a workspace group.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "SingleStore Helios Pricing page",
+        "description": "A webpage detailing pricing for SingleStore Helios services.",
+        "aliases": [],
+        "category": "Product",
+        "confidence": 1.0
+      },
+      {
+        "name": "disableAutoSuspend",
+        "description": "An optional parameter to disable automatic suspension of a service.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "use method",
+        "description": "A method to interact with a specific database within a connection.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "DatabaseSchema",
+        "description": "A generic schema to describe a database and its tables.",
+        "aliases": [],
+        "category": "Product",
+        "confidence": 1.0
+      },
+      {
+        "name": "create method",
+        "description": "A method to create a database within a connection.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "query method",
+        "description": "A method to execute a MySQL query on the database.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "RowType",
+        "description": "A flexible type for representing rows in a query result.",
+        "aliases": [],
+        "category": "Product",
+        "confidence": 1.0
+      }
+    ],
+    "relationships": [
+      {
+        "source": "workspace group",
+        "target": "delete method",
+        "relation_type": "deletable_by",
+        "description": "A workspace group can be deleted by using the delete method.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685254
+      },
+      {
+        "source": "delete method",
+        "target": "Workspace Group instance",
+        "relation_type": "applies_to",
+        "description": "The delete method can be called on a Workspace Group instance.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685254
+      },
+      {
+        "source": "workspace group",
+        "target": "force argument",
+        "relation_type": "deletable_with",
+        "description": "A workspace group can be forcibly deleted by setting the force argument to true.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685254
+      },
+      {
+        "source": "free tier workspace",
+        "target": "SSL certificate",
+        "relation_type": "requires",
+        "description": "Connecting to a free tier workspace requires downloading and setting an SSL certificate.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685254
+      },
+      {
+        "source": "workspace group",
+        "target": "includeTerminated",
+        "relation_type": "parameter_for",
+        "description": "The includeTerminated parameter is used to include terminated workspaces in a workspace group query.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685254
+      },
+      {
+        "source": "workspace group",
+        "target": "select",
+        "relation_type": "parameter_for",
+        "description": "The select parameter is used to select specific fields from a workspace group.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685254
+      },
+      {
+        "source": "workspace",
+        "target": "SingleStore Helios Pricing page",
+        "relation_type": "referenced_by",
+        "description": "Available size values for creating a workspace are referenced by the SingleStore Helios Pricing page.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685254
+      },
+      {
+        "source": "use method",
+        "target": "DatabaseSchema",
+        "relation_type": "can_use",
+        "description": "The use method can optionally use a DatabaseSchema to describe the database schema.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685254
+      },
+      {
+        "source": "create method",
+        "target": "DatabaseSchema",
+        "relation_type": "can_use",
+        "description": "The create method can optionally use a DatabaseSchema to describe the database schema.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685254
+      },
+      {
+        "source": "query method",
+        "target": "RowType",
+        "relation_type": "returns",
+        "description": "The query method returns a query result as an array of RowType.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685254
+      }
+    ]
+  }
+}

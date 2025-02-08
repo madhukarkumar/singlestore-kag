@@ -1,0 +1,116 @@
+{
+  "metadata": {
+    "doc_id": 1,
+    "chunk_id": 2251799813685267,
+    "timestamp": "2025-02-08T15:48:42.483503"
+  },
+  "extracted_data": {
+    "entities": [
+      {
+        "name": "vectorSearch",
+        "description": "A method for performing a vector search with additional SQL-like conditions.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "createChatCompletion",
+        "description": "A method for generating chat completions based on a vector search within a table.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "v_score",
+        "description": "A field reflecting the similarity score of each row to the search prompt in a vector search.",
+        "aliases": [],
+        "category": "Field",
+        "confidence": 1.0
+      },
+      {
+        "name": "stream",
+        "description": "An option for retrieving results in a streamed fashion.",
+        "aliases": [],
+        "category": "Option",
+        "confidence": 1.0
+      },
+      {
+        "name": "handleStream",
+        "description": "A function used to process the stream of data chunks.",
+        "aliases": [],
+        "category": "Function",
+        "confidence": 1.0
+      },
+      {
+        "name": "table",
+        "description": "A generic representation of a database table involved in operations.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "folderName",
+        "description": "An example of a folder path.",
+        "aliases": [
+          "File path example"
+        ],
+        "category": "Example",
+        "confidence": 1.0
+      },
+      {
+        "name": "fileName.json",
+        "description": "An example of a file name within a folder path.",
+        "aliases": [],
+        "category": "Example",
+        "confidence": 1.0
+      }
+    ],
+    "relationships": [
+      {
+        "source": "vectorSearch",
+        "target": "v_score",
+        "relation_type": "returns",
+        "description": "The vectorSearch method returns a v_score field.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685267
+      },
+      {
+        "source": "createChatCompletion",
+        "target": "vectorSearch",
+        "relation_type": "based_on",
+        "description": "The createChatCompletion method is based on a vector search.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685267
+      },
+      {
+        "source": "createChatCompletion",
+        "target": "stream",
+        "relation_type": "option",
+        "description": "The createChatCompletion method accepts the stream option for result retrieval.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685267
+      },
+      {
+        "source": "stream",
+        "target": "handleStream",
+        "relation_type": "processed_by",
+        "description": "When using stream: true, the handleStream function processes the stream.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685267
+      },
+      {
+        "source": "folderName",
+        "target": "fileName.json",
+        "relation_type": "contains",
+        "description": "The folderName contains the fileName.json as an example path.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685267
+      }
+    ]
+  }
+}

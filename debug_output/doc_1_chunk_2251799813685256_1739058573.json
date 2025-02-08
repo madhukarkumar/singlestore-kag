@@ -1,0 +1,151 @@
+{
+  "metadata": {
+    "doc_id": 1,
+    "chunk_id": 2251799813685256,
+    "timestamp": "2025-02-08T15:49:33.388575"
+  },
+  "extracted_data": {
+    "entities": [
+      {
+        "name": "workspaceGroup",
+        "description": "A logical grouping of workspaces in a cloud environment, managed by a client.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "client",
+        "description": "Software client used to manage workspace groups.",
+        "aliases": [],
+        "category": "Product",
+        "confidence": 1.0
+      },
+      {
+        "name": "US West 2 (Oregon)",
+        "description": "A region designation for cloud resources.",
+        "aliases": [],
+        "category": "Location",
+        "confidence": 1.0
+      },
+      {
+        "name": "IP_ADDRESS",
+        "description": "Placeholder for an IP address in firewall settings.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "KMSKeyID",
+        "description": "Identifier for a Key Management Service (KMS) key.",
+        "aliases": [
+          "dataBucketKMSKeyID",
+          "backupBucketKMSKeyID"
+        ],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "metrics",
+        "description": "Performance and usage data for a workspace group.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "privateConnections",
+        "description": "Private network connections associated with a workspace group.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "connection",
+        "description": "A network connection to a workspace using specific credentials and port.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "workspace",
+        "description": "A single workspace within a workspace group.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      }
+    ],
+    "relationships": [
+      {
+        "source": "client",
+        "target": "workspaceGroup",
+        "relation_type": "manages",
+        "description": "The client software is used to manage workspace groups.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685256
+      },
+      {
+        "source": "workspaceGroup",
+        "target": "US West 2 (Oregon)",
+        "relation_type": "located_in",
+        "description": "Workspace groups can be located in specific regions, such as US West 2 (Oregon).",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685256
+      },
+      {
+        "source": "workspaceGroup",
+        "target": "IP_ADDRESS",
+        "relation_type": "uses",
+        "description": "Workspace groups can use specific IP addresses in their firewall settings.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685256
+      },
+      {
+        "source": "workspaceGroup",
+        "target": "KMSKeyID",
+        "relation_type": "associated_with",
+        "description": "Workspace groups can be associated with specific KMSKeyIDs for data and backup buckets.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685256
+      },
+      {
+        "source": "workspaceGroup",
+        "target": "metrics",
+        "relation_type": "has",
+        "description": "Workspace groups have metrics that provide performance and usage data.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685256
+      },
+      {
+        "source": "workspaceGroup",
+        "target": "privateConnections",
+        "relation_type": "has",
+        "description": "Workspace groups have private connections for network communication.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685256
+      },
+      {
+        "source": "workspaceGroup",
+        "target": "connection",
+        "relation_type": "enables",
+        "description": "Workspace groups enable network connections to workspaces.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685256
+      },
+      {
+        "source": "workspaceGroup",
+        "target": "workspace",
+        "relation_type": "contains",
+        "description": "Workspace groups contain individual workspaces.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685256
+      }
+    ]
+  }
+}

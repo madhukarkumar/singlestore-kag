@@ -1,0 +1,114 @@
+{
+  "metadata": {
+    "doc_id": 1,
+    "chunk_id": 2251799813685263,
+    "timestamp": "2025-02-08T15:49:07.423633"
+  },
+  "extracted_data": {
+    "entities": [
+      {
+        "name": "showInfo",
+        "description": "A method for retrieving information about the database or table, with an optional extended information feature.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "showTablesInfo",
+        "description": "A method for retrieving information about the database tables, with an optional extended information feature.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "use",
+        "description": "A method for accessing a specific table within the database, with optional parameters for table name and schema.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "create",
+        "description": "A method for creating a new table in the database, allowing the definition of table name, schema, columns, and their properties.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "insert",
+        "description": "A method for inserting data into a table, supporting single or multiple values.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "find",
+        "description": "A method for retrieving values from a table, with support for conditions, joins, grouping, ordering, and pagination.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "SingleStoreClient",
+        "description": "A client for interacting with SingleStore databases, with optional management API access and AI functionality.",
+        "aliases": [
+          "@singlestore/client"
+        ],
+        "category": "Software",
+        "confidence": 1.0
+      },
+      {
+        "name": "AI",
+        "description": "A module for integrating AI functionality into SingleStoreClient, requiring an OpenAI API key.",
+        "aliases": [
+          "@singlestore/ai"
+        ],
+        "category": "Software",
+        "confidence": 1.0
+      },
+      {
+        "name": "TypeScript",
+        "description": "A programming language used in the development of SingleStore Client.",
+        "aliases": [],
+        "category": "Programming Language",
+        "confidence": 1.0
+      },
+      {
+        "name": "JavaScript",
+        "description": "A programming language used in the development of SingleStore Client.",
+        "aliases": [],
+        "category": "Programming Language",
+        "confidence": 1.0
+      }
+    ],
+    "relationships": [
+      {
+        "source": "SingleStoreClient",
+        "target": "AI",
+        "relation_type": "supports",
+        "description": "SingleStoreClient supports integration with AI functionality through the AI module.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685263
+      },
+      {
+        "source": "SingleStoreClient",
+        "target": "TypeScript",
+        "relation_type": "developed_in",
+        "description": "SingleStore Client is developed primarily in TypeScript.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685263
+      },
+      {
+        "source": "SingleStoreClient",
+        "target": "JavaScript",
+        "relation_type": "developed_in",
+        "description": "SingleStore Client also includes development in JavaScript.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685263
+      }
+    ]
+  }
+}

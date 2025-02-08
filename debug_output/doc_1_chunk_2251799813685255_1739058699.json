@@ -1,0 +1,177 @@
+{
+  "metadata": {
+    "doc_id": 1,
+    "chunk_id": 2251799813685255,
+    "timestamp": "2025-02-08T15:51:39.615476"
+  },
+  "extracted_data": {
+    "entities": [
+      {
+        "name": "showInfo",
+        "description": "A method to retrieve information about the database or table, with an optional extended information feature.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "showTablesInfo",
+        "description": "A method to retrieve information about the database tables, with an optional extended information feature.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "use",
+        "description": "A method to access a specific table within the database, providing an interface for querying and manipulation.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "create",
+        "description": "A method to create a new table in the database, allowing to define table name, schema, columns, and their properties.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "insert",
+        "description": "A method to insert data into a table, supporting single or multiple values insertion.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "find",
+        "description": "A method to retrieve values from a table, with support for conditions, joins, grouping, ordering, and pagination.",
+        "aliases": [],
+        "category": "Method",
+        "confidence": 1.0
+      },
+      {
+        "name": "SingleStoreClient",
+        "description": "A client for interacting with SingleStore databases, with optional management API access and AI functionality.",
+        "aliases": [
+          "@singlestore/client"
+        ],
+        "category": "Software",
+        "confidence": 1.0
+      },
+      {
+        "name": "AI",
+        "description": "A module to enable AI functionality within SingleStoreClient, requiring an OpenAI API key.",
+        "aliases": [
+          "@singlestore/ai"
+        ],
+        "category": "Software",
+        "confidence": 1.0
+      },
+      {
+        "name": "organization",
+        "description": "A property of SingleStoreClient to get the current organization information.",
+        "aliases": [],
+        "category": "Property",
+        "confidence": 1.0
+      },
+      {
+        "name": "workspaceGroup",
+        "description": "A property of SingleStoreClient to manage workspace groups, allowing retrieval by ID or name.",
+        "aliases": [],
+        "category": "Property",
+        "confidence": 1.0
+      }
+    ],
+    "relationships": [
+      {
+        "source": "showInfo",
+        "target": "database",
+        "relation_type": "retrieves_information_from",
+        "description": "The showInfo method retrieves information from the database.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685255
+      },
+      {
+        "source": "showTablesInfo",
+        "target": "database tables",
+        "relation_type": "retrieves_information_from",
+        "description": "The showTablesInfo method retrieves information from the database tables.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685255
+      },
+      {
+        "source": "use",
+        "target": "specific table",
+        "relation_type": "accesses",
+        "description": "The use method provides access to a specific table within the database.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685255
+      },
+      {
+        "source": "create",
+        "target": "new table",
+        "relation_type": "creates",
+        "description": "The create method allows for the creation of a new table in the database.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685255
+      },
+      {
+        "source": "insert",
+        "target": "table",
+        "relation_type": "inserts_data_into",
+        "description": "The insert method inserts data into a table.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685255
+      },
+      {
+        "source": "find",
+        "target": "table",
+        "relation_type": "retrieves_values_from",
+        "description": "The find method retrieves values from a table.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685255
+      },
+      {
+        "source": "SingleStoreClient",
+        "target": "SingleStore databases",
+        "relation_type": "interacts_with",
+        "description": "SingleStoreClient is used for interacting with SingleStore databases.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685255
+      },
+      {
+        "source": "AI",
+        "target": "SingleStoreClient",
+        "relation_type": "enables_functionality_for",
+        "description": "The AI module enables AI functionality for SingleStoreClient.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685255
+      },
+      {
+        "source": "organization",
+        "target": "SingleStoreClient",
+        "relation_type": "property_of",
+        "description": "The organization property is a part of SingleStoreClient.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685255
+      },
+      {
+        "source": "workspaceGroup",
+        "target": "SingleStoreClient",
+        "relation_type": "property_of",
+        "description": "The workspaceGroup property is a part of SingleStoreClient.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685255
+      }
+    ]
+  }
+}

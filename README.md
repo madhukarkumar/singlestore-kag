@@ -64,6 +64,20 @@ The system uses four main tables in SingleStore:
    - Embedding generation using OpenAI
    - Database integration
 
+3. **Knowledge Graph Generator (knowledge_graph.py)**
+   ```python
+   from knowledge_graph import KnowledgeGraphGenerator
+   
+   generator = KnowledgeGraphGenerator()
+   graph = generator.generate_knowledge_graph("document.pdf", document_id=1)
+   ```
+   
+   Capabilities:
+   - Entity extraction using OpenAI
+   - Relationship extraction
+   - Graph storage in SingleStore
+   - Debug mode for local development
+
 ## Setup and Installation
 
 1. **Python Environment**
@@ -130,6 +144,15 @@ The application provides several command-line options for different stages of do
    python main.py document.pdf --document_id 1
    ```
 
+5. **Knowledge Graph Generation**
+   ```bash
+   # Process a document and generate knowledge graph
+   python knowledge_graph.py --doc_id 1
+
+   # Process with debug output (saves JSON files locally)
+   python knowledge_graph.py --doc_id 1 --debug
+   ```
+
 ### Command Line Arguments
 
 - `input_file`: Path to input document (PDF or markdown)
@@ -137,6 +160,7 @@ The application provides several command-line options for different stages of do
 - `--chunks_only`: Only create chunks, don't generate embeddings
 - `--create_embeddings`: Create embeddings from an existing markdown file
 - `--store_embeddings`: Store existing embeddings from JSON file into SingleStore
+- `--debug`: Enable debug mode for local development
 
 ### Typical Workflow
 
@@ -150,6 +174,9 @@ The application provides several command-line options for different stages of do
    
    # Finally, store embeddings in SingleStore
    python main.py mydoc.md --document_id 1 --store_embeddings
+   
+   # Generate knowledge graph
+   python knowledge_graph.py --doc_id 1
    ```
 
 2. Start with a markdown document:
@@ -159,7 +186,77 @@ The application provides several command-line options for different stages of do
    
    # Store embeddings in SingleStore
    python main.py mydoc.md --document_id 1 --store_embeddings
+   
+   # Generate knowledge graph
+   python knowledge_graph.py --doc_id 1
    ```
+
+## Project Status
+
+### Completed Features 
+
+1. **Document Processing**
+   - PDF to markdown conversion with semantic chunking
+   - Embedding generation using OpenAI (text-embedding-ada-002)
+   - SingleStore vector database integration
+   - Clear CLI interface with specific processing flags
+
+2. **Database Integration**
+   - Documents table for metadata
+   - Document_Embeddings table with VECTOR(1536)
+   - HNSW vector index for similarity search
+   - Full-text search capabilities
+
+3. **Technical Infrastructure**
+   - Python 3.12.9 environment management
+   - Comprehensive error handling and logging
+   - Environment-based configuration
+   - Modular code structure
+
+4. **Knowledge Graph Generation** 
+   - Design knowledge graph schema
+   - Implement OpenAI-based entity extraction
+   - Implement relationship extraction
+   - Create graph storage in SingleStore
+   - Debug mode for local development
+
+### In Progress 
+
+1. **Query Interface**
+   - Design API endpoints
+   - Implement hybrid search (vector + graph)
+   - Create query optimization layer
+
+2. **API Development**
+   - Document insertion endpoint
+   - Knowledge graph query endpoint
+   - Vector similarity search endpoint
+
+## Roadmap
+
+### Phase 1: Document Processing 
+- [x] Create semantic chunks from PDF using Gemini
+- [x] Convert chunks to embeddings using OpenAI
+- [x] Store embeddings in SingleStore
+- [x] Implement proper dimension handling (1536D)
+
+### Phase 2: Knowledge Graph 
+- [x] Design knowledge graph schema
+- [x] Create OpenAI prompts for graph extraction
+- [x] Implement graph generation pipeline
+- [x] Store and index graph in SingleStore
+
+### Phase 3: Query Interface 
+- [ ] Design REST API endpoints
+- [ ] Implement vector similarity search
+- [ ] Add knowledge graph traversal
+- [ ] Create hybrid search capabilities
+
+### Phase 4: Production Ready 
+- [ ] Add authentication and rate limiting
+- [ ] Implement caching layer
+- [ ] Add monitoring and analytics
+- [ ] Create deployment documentation
 
 ## API Reference
 
@@ -306,8 +403,8 @@ MIT - See LICENSE file for details
 [x] Create semantic chunks from PDF using Gemini
 [x] Convert chunks to embeddings in an md file using OpenAI
 [x] Store embeddings in SingleStore
-[ ] Use Open AI to create Knowledge Graph in JSON
-[ ] Store Knowledge Graph in SingleStore
+[x] Use Open AI to create Knowledge Graph in JSON
+[x] Store Knowledge Graph in SingleStore
 [ ] Create small test to query across Knowledge Graph and embeddings
 [ ] Create API endpoint to query knowledge graph
 [ ] Create API endpoint to insert document into database

@@ -1,0 +1,139 @@
+{
+  "metadata": {
+    "doc_id": 1,
+    "chunk_id": 2251799813685257,
+    "timestamp": "2025-02-08T15:52:12.673438"
+  },
+  "extracted_data": {
+    "entities": [
+      {
+        "name": "workspace",
+        "description": "A logical section or environment for work, often used in software development for organizing projects.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "workspaceGroup",
+        "description": "A collection or group of workspaces, allowing for management operations across multiple workspaces.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "WORKSPACE_NAME",
+        "description": "A placeholder or variable representing the name of a workspace.",
+        "aliases": [],
+        "category": "Variable",
+        "confidence": 1.0
+      },
+      {
+        "name": "WORKSPACE_ID",
+        "description": "A placeholder or variable representing the unique identifier of a workspace.",
+        "aliases": [],
+        "category": "Variable",
+        "confidence": 1.0
+      },
+      {
+        "name": "Database",
+        "description": "A structured set of data held in a computer, especially one that is accessible in various ways.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "DatabaseSchema",
+        "description": "A definition or structure of a database, including its tables, columns, and other properties.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "DatabaseType",
+        "description": "A classification or type of database, potentially defining its structure or how it is used.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      },
+      {
+        "name": "DATABASE_NAME",
+        "description": "A placeholder or variable representing the name of a database.",
+        "aliases": [],
+        "category": "Variable",
+        "confidence": 1.0
+      },
+      {
+        "name": "connection",
+        "description": "A link or pathway for communication between two or more points, often used in the context of databases to represent the connection to a database.",
+        "aliases": [],
+        "category": "Concept",
+        "confidence": 1.0
+      }
+    ],
+    "relationships": [
+      {
+        "source": "workspaceGroup",
+        "target": "workspace",
+        "relation_type": "contains",
+        "description": "workspaceGroup contains workspace, indicating a hierarchical relationship where workspaceGroup manages or groups multiple workspaces.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685257
+      },
+      {
+        "source": "workspace",
+        "target": "WORKSPACE_NAME",
+        "relation_type": "identified_by",
+        "description": "workspace is identified by WORKSPACE_NAME, showing that WORKSPACE_NAME is a key attribute or identifier for a workspace.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685257
+      },
+      {
+        "source": "workspace",
+        "target": "WORKSPACE_ID",
+        "relation_type": "identified_by",
+        "description": "workspace is identified by WORKSPACE_ID, indicating that WORKSPACE_ID is a unique identifier for a workspace.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685257
+      },
+      {
+        "source": "Database",
+        "target": "DatabaseSchema",
+        "relation_type": "defined_by",
+        "description": "Database is defined by DatabaseSchema, showing that DatabaseSchema provides the structure or definition for a Database.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685257
+      },
+      {
+        "source": "DatabaseSchema",
+        "target": "DatabaseType",
+        "relation_type": "extends",
+        "description": "DatabaseSchema extends DatabaseType, indicating that DatabaseSchema inherits properties or characteristics from DatabaseType.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685257
+      },
+      {
+        "source": "Database",
+        "target": "DATABASE_NAME",
+        "relation_type": "identified_by",
+        "description": "Database is identified by DATABASE_NAME, showing that DATABASE_NAME is a key attribute or identifier for a Database.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685257
+      },
+      {
+        "source": "connection",
+        "target": "Database",
+        "relation_type": "connects_to",
+        "description": "connection connects to Database, indicating that connection is used to establish a link or access to a Database.",
+        "confidence": 1.0,
+        "doc_id": 1,
+        "chunk_id": 2251799813685257
+      }
+    ]
+  }
+}
