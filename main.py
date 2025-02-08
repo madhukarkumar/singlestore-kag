@@ -3,6 +3,8 @@ import sys
 import argparse
 import logging
 import json
+import numpy as np
+from db import DatabaseConnection
 
 import requests
 import openai
@@ -172,39 +174,87 @@ def create_embeddings(markdown_path: str, embedding_model: str = EMBEDDING_MODEL
         raise
 
 
+def insert_embeddings_to_db(embeddings_file: str, document_id: int) -> None:
+    """
+    Insert text chunks and their embeddings into SingleStore database.
+    
+    :param embeddings_file: Path to the JSON file containing chunks and embeddings
+    :param document_id: Unique identifier for the document these embeddings belong to
+    """
+    logger.info("Inserting embeddings from file: %s", embeddings_file)
+    
+    try:
+        # Read the embeddings file
+        with open(embeddings_file, 'r') as f:
+            data = json.load(f)
+        
+        # Connect to database
+        db = DatabaseConnection()
+        db.connect()
+        
+        # Prepare insert query
+        insert_query = """
+            INSERT INTO document_embeddings 
+            (text_chunk, vector, document_id)
+            VALUES (%s, %s, %s)
+        """
+        
+        # Insert each chunk and its embedding
+        for item in data:
+            chunk = item['chunk']
+            embedding = np.array(item['embedding'], dtype=np.float32)
+            
+            try:
+                db.cursor.execute(insert_query, (chunk, embedding.tobytes(), document_id))
+                db.conn.commit()
+            except Exception as e:
+                logger.error("Error inserting chunk: %s", str(e))
+                db.conn.rollback()
+                raise
+        
+        logger.info("Successfully inserted %d chunks for document_id %d", len(data), document_id)
+        
+    except Exception as e:
+        logger.error("Failed to insert embeddings: %s", str(e))
+        raise
+    finally:
+        if db and db.conn:
+            db.close()
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Process PDF files for semantic chunks and embeddings")
-    parser.add_argument("input_path", help="Path to the PDF file to process or markdown file for embeddings")
-    parser.add_argument("--get-chunks-only", action="store_true", help="Only extract chunks, don't create embeddings")
-    parser.add_argument("--create-embeddings", action="store_true", help="Create embeddings from markdown file")
+    parser = argparse.ArgumentParser(description="Process PDF documents and create embeddings")
+    parser.add_argument("--pdf", type=str, help="Path to the PDF file to process")
+    parser.add_argument("--markdown", type=str, help="Path to an existing markdown file to process")
+    parser.add_argument("--embeddings", type=str, help="Path to an existing embeddings file to insert into database")
+    parser.add_argument("--document_id", type=int, help="Document ID for database insertion", default=None)
     
     args = parser.parse_args()
     
     try:
-        # Check if the input is a markdown file
-        if args.input_path.endswith('.md'):
-            if not os.path.exists(args.input_path):
-                logging.error("Markdown file not found: %s", args.input_path)
-                sys.exit(1)
-            print(f"DEBUG: Using existing markdown file: {args.input_path}")
-            markdown_path = args.input_path
+        if args.embeddings and args.document_id is not None:
+            # Insert existing embeddings into database
+            insert_embeddings_to_db(args.embeddings, args.document_id)
+            return
+            
+        if args.pdf:
+            # Process PDF file
+            md_path = get_chunks(args.pdf)
+        elif args.markdown:
+            # Use existing markdown file
+            md_path = args.markdown
         else:
-            # Treat as PDF file
-            if not os.path.exists(args.input_path):
-                logging.error("PDF file not found: %s", args.input_path)
-                sys.exit(1)
-            # Get chunks from PDF
-            markdown_path = get_chunks(args.input_path)
-            print(f"DEBUG: Chunks extracted to {markdown_path}")
+            parser.error("Either --pdf or --markdown must be specified")
+            
+        # Create embeddings
+        embeddings_path = create_embeddings(md_path)
         
-        # Create embeddings if requested
-        if not args.get_chunks_only or args.create_embeddings:
-            print("DEBUG: Creating embeddings...")
-            embeddings_path = create_embeddings(markdown_path)
-            print(f"DEBUG: Embeddings created and saved to {embeddings_path}")
-    
+        # If document_id is provided, also insert into database
+        if args.document_id is not None:
+            insert_embeddings_to_db(embeddings_path, args.document_id)
+            
     except Exception as e:
-        logging.error("Processing failed: %s", str(e))
+        logger.error("Processing failed: %s", str(e))
         sys.exit(1)
 
 
