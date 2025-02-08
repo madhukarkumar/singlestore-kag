@@ -33,6 +33,7 @@ class DatabaseConnection:
     def connect(self) -> None:
         """
         Establish connection to SingleStore database.
+        
         Raises:
             Exception: If connection fails or required environment variables are missing.
         """
@@ -108,7 +109,12 @@ class DatabaseConnection:
             raise
     
     def is_connected(self) -> bool:
-        """Check if the database connection is open and valid."""
+        """
+        Check if the database connection is open and valid.
+        
+        Returns:
+            True if the connection is open and valid, False otherwise
+        """
         if self.conn is None or self.cursor is None:
             return False
         try:
@@ -121,6 +127,110 @@ class DatabaseConnection:
         except Exception:
             return False
     
+    def table_exists(self, table_name: str) -> bool:
+        """
+        Check if a table exists in the database.
+
+        Args:
+            table_name: Name of the table to check
+
+        Returns:
+            True if the table exists, False otherwise
+        """
+        try:
+            # Use case-sensitive table name comparison for SingleStore
+            result = self.execute_query(
+                "SELECT COUNT(*) FROM information_schema.tables "
+                "WHERE table_schema = DATABASE() AND table_name = BINARY %s",
+                (table_name,)
+            )
+            return result[0][0] > 0
+        except Exception as e:
+            logger.error("Error checking table existence: %s", str(e))
+            return False
+
+    def create_tables(self) -> None:
+        """Create all required tables if they don't exist."""
+        try:
+            # Create Document_Embeddings table
+            if not self.table_exists("Document_Embeddings"):
+                create_embeddings_table = """
+                CREATE TABLE Document_Embeddings (
+                    embedding_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    doc_id BIGINT NOT NULL,
+                    content TEXT,
+                    embedding VECTOR(1536)
+                )
+                """
+                self.execute_query(create_embeddings_table)
+                
+                # Add vector index
+                vector_index = """
+                ALTER TABLE Document_Embeddings
+                    ADD VECTOR INDEX idx_vec (embedding) 
+                    INDEX_OPTIONS '{"index_type": "HNSW_FLAT", "metric_type": "EUCLIDEAN_DISTANCE"}'
+                """
+                self.execute_query(vector_index)
+                
+                # Add fulltext index
+                fulltext_index = """
+                ALTER TABLE Document_Embeddings
+                    ADD FULLTEXT INDEX content_ft_idx (content) USING VERSION 2
+                """
+                self.execute_query(fulltext_index)
+                logger.info("Created Document_Embeddings table with indexes")
+            
+            # Create Documents table
+            if not self.table_exists("Documents"):
+                create_documents = """
+                CREATE TABLE Documents (
+                    doc_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    title VARCHAR(255),
+                    author VARCHAR(100),
+                    publish_date DATE,
+                    source VARCHAR(255)
+                )
+                """
+                self.execute_query(create_documents)
+                logger.info("Created Documents table")
+            
+            # Create Relationships table
+            if not self.table_exists("Relationships"):
+                create_relationships = """
+                CREATE TABLE Relationships (
+                    relationship_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    source_entity_id BIGINT NOT NULL,
+                    target_entity_id BIGINT NOT NULL,
+                    relation_type VARCHAR(100),
+                    doc_id BIGINT,
+                    KEY (source_entity_id) USING HASH,
+                    KEY (target_entity_id) USING HASH,
+                    KEY (doc_id)
+                )
+                """
+                self.execute_query(create_relationships)
+                logger.info("Created Relationships table")
+            
+            # Create Entities table
+            if not self.table_exists("Entities"):
+                create_entities = """
+                CREATE TABLE Entities (
+                    entity_id BIGINT NOT NULL AUTO_INCREMENT,
+                    name VARCHAR(255) NOT NULL,
+                    description TEXT,
+                    aliases JSON,
+                    category VARCHAR(100),
+                    PRIMARY KEY (entity_id, name),
+                    SHARD KEY (entity_id, name)
+                )
+                """
+                self.execute_query(create_entities)
+                logger.info("Created Entities table")
+                
+        except Exception as e:
+            logger.error("Failed to create tables: %s", str(e))
+            raise
+    
     def __enter__(self):
         """Context manager entry."""
         self.connect()
@@ -130,7 +240,8 @@ class DatabaseConnection:
         """Context manager exit."""
         self.disconnect()
 
-def test_connection() -> None:
+
+def test_connection():
     """
     Test the database connection and run a simple query.
     This function will:
@@ -144,31 +255,27 @@ def test_connection() -> None:
             is_connected = db.is_connected()
             print(f"Connection Status: {'✅ Connected' if is_connected else '❌ Not Connected'}")
             
-            # Test basic connection and version
+            # Get database version
             version = db.execute_query("SELECT VERSION()")
-            if version:
-                print(f"✅ Successfully connected to SingleStore!")
-                print(f"Database Version: {version[0][0]}")
+            print(f"Database Version: {version[0][0] if version else 'Unknown'}")
             
-            # Test query execution with current timestamp
+            # Get current timestamp
             time_result = db.execute_query("SELECT NOW()")
-            if time_result:
-                print(f"Current Database Time: {time_result[0][0]}")
+            print(f"Current Time: {time_result[0][0] if time_result else 'Unknown'}")
             
-            # Test current user and database info - fixed syntax
-            user_info = db.execute_query("""
+            # Get user and database info
+            info = db.execute_query("""
                 SELECT USER() AS user, DATABASE() AS db
             """)
-            if user_info:
-                print(f"Connected User: {user_info[0][0]}")
-                print(f"Current Database: {user_info[0][1]}")
-                
-            print("\n✅ All connection tests passed successfully!")
+            if info:
+                print(f"Connected User: {info[0][0]}")
+                print(f"Current Database: {info[0][1]}")
+            
+            print("✅ Connection test successful!")
             
     except Exception as e:
         print(f"❌ Connection test failed: {str(e)}")
-        raise
+
 
 if __name__ == "__main__":
-    # Run the connection test
     test_connection()

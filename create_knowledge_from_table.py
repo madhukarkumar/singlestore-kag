@@ -67,47 +67,83 @@ Return only the JSON output.
         logger.error("Error extracting triples from text chunk: %s", str(e))
         return []
 
+def get_or_create_entity(db: DatabaseConnection, entity_data: dict) -> int:
+    """Get existing entity ID or create new entity."""
+    try:
+        # Check if entity exists
+        select_query = """
+            SELECT entity_id 
+            FROM Entities 
+            WHERE name = %s 
+            LIMIT 1
+        """
+        result = db.execute_query(select_query, (entity_data['name'],))
+        
+        if result:
+            return result[0][0]
+        
+        # Create new entity
+        insert_query = """
+            INSERT INTO Entities 
+            (name, description, aliases, category)
+            VALUES (%s, %s, %s, %s)
+        """
+        db.execute_query(
+            insert_query,
+            (
+                entity_data['name'],
+                entity_data.get('description'),
+                json.dumps(entity_data.get('aliases', [])),
+                entity_data.get('category')
+            )
+        )
+        
+        # Get the new entity_id
+        result = db.execute_query("SELECT LAST_INSERT_ID()")
+        return result[0][0]
+        
+    except Exception as e:
+        logger.error("Failed to get/create entity: %s", str(e))
+        raise
+
 def main():
     try:
         # Use DatabaseConnection class with context manager
         with DatabaseConnection() as db:
             # Fetch all document embeddings
-            rows = db.execute_query("SELECT id, text_chunk FROM document_embeddings")
+            rows = db.execute_query("""
+                SELECT embedding_id, content, doc_id 
+                FROM Document_Embeddings 
+                ORDER BY doc_id, embedding_id
+            """)
+            
             if not rows:
                 logger.info("No document embeddings found to process.")
                 return
-
-            # Iterate over each document embedding
+            
             for row in rows:
-                doc_id = row[0]  # id is first column
-                text_chunk = row[1]  # text_chunk is second column
-
+                embedding_id, text_chunk, doc_id = row
+                
                 logger.info("Processing document embedding ID: %d", doc_id)
                 triples = extract_triples(text_chunk)
                 logger.info("Extracted %d triple(s) from document ID: %d", len(triples), doc_id)
 
-                # Insert each extracted triple into the knowledge_graph table
                 for triple in triples:
-                    subject = triple.get("subject", "")
-                    predicate = triple.get("predicate", "")
-                    object_ = triple.get("object", "")
-                    properties = triple.get("properties", {})
-
-                    insert_query = """
-                        INSERT INTO knowledge_graph (subject, predicate, object, properties)
+                    subject_id = get_or_create_entity(db, {'name': triple.get("subject", "")})
+                    object_id = get_or_create_entity(db, {'name': triple.get("object", "")})
+                    
+                    # Insert relationship
+                    insert_relationship = """
+                        INSERT INTO Relationships 
+                        (source_entity_id, target_entity_id, relation_type, doc_id)
                         VALUES (%s, %s, %s, %s)
                     """
-                    try:
-                        # Convert properties to JSON string
-                        db.execute_query(
-                            insert_query, 
-                            (subject, predicate, object_, json.dumps(properties))
-                        )
-                    except Exception as e:
-                        logger.error("Error inserting triple for document ID %d: %s", doc_id, str(e))
-                        raise
-
-        logger.info("Processing complete.")
+                    db.execute_query(
+                        insert_relationship,
+                        (subject_id, object_id, triple.get("predicate", ""), doc_id)
+                    )
+            
+            logger.info("Processing complete.")
 
     except Exception as e:
         logger.error("Processing failed: %s", str(e))
