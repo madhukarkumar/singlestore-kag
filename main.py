@@ -28,7 +28,7 @@ class DocumentProcessor:
         self.gemini_api_key = os.getenv("GEMINI_API_KEY")
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         self.project_id = os.getenv("PROJECT_ID")
-        self.embedding_model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
+        self.embedding_model = os.getenv("EMBEDDING_MODEL", "text-embedding-ada-002")
         
         # Validate environment variables
         self._validate_env_vars()
@@ -154,14 +154,15 @@ class DocumentProcessor:
             # Convert to float32 numpy array for SingleStore compatibility
             embedding_array = np.array(embedding_vector, dtype=np.float32)
             # Verify the embedding has correct dimensions
-            expected_dims = 3072 if self.embedding_model == "text-embedding-3-large" else 1536
-            if embedding_array.shape[0] != expected_dims:
-                logging.error(
-                    f"Embedding dimension mismatch for chunk {idx}: "
-                    f"expected {expected_dims}, got {embedding_array.shape[0]}"
+            expected_dims = 1536  # text-embedding-ada-002 always produces 1536 dimensions
+            if len(embedding_array) != expected_dims:
+                logger.error(
+                    "Embedding dimension mismatch: got %d dimensions, schema expects 1536. "
+                    "The text-embedding-ada-002 model should always produce 1536 dimensions.", 
+                    len(embedding_array)
                 )
-                continue
-
+                raise ValueError("Embedding dimension mismatch")
+            
             # Convert numpy array back to list for JSON serialization
             embedding_list = embedding_array.tolist()
             # Preserve original JSON structure in the record
@@ -199,10 +200,19 @@ class DocumentProcessor:
             with DatabaseConnection() as db:
                 logger.info("Successfully connected to SingleStore database")
                 
-                # Create table if not exists
+                # Ensure document exists in Documents table
+                doc_insert_query = """
+                INSERT INTO Documents (doc_id) 
+                VALUES (%s)
+                ON DUPLICATE KEY UPDATE doc_id = doc_id
+                """
+                db.execute_query(doc_insert_query, (document_id,))
+                logger.debug("Ensured document_id %d exists in Documents table", document_id)
+                
+                # Insert embeddings
                 insert_query = """
-                INSERT INTO document_embeddings 
-                (document_id, chunk_text, embedding) 
+                INSERT INTO Document_Embeddings 
+                (doc_id, content, embedding) 
                 VALUES (%s, %s, %s)
                 """
                 
@@ -210,18 +220,29 @@ class DocumentProcessor:
                 
                 for item in data:
                     chunk = item['text']
-                    embedding = np.array(item['embedding'], dtype=np.float32)
-                    embedding_bytes = embedding.tobytes()
+                    embedding = item['embedding']  # This is already a list of floats
+                    
+                    # Verify embedding dimensions match schema
+                    if len(embedding) != 1536:
+                        logger.error(
+                            "Embedding dimension mismatch: got %d dimensions, schema expects 1536. "
+                            "Update schema.sql to match your embedding model's dimensions.", 
+                            len(embedding)
+                        )
+                        raise ValueError("Embedding dimension mismatch")
+                    
+                    # Convert embedding to JSON array string for SingleStore VECTOR type
+                    embedding_json = json.dumps(embedding)
                     
                     # Log query details for debugging
                     debug_query = insert_query % (
                         document_id,
                         repr(chunk[:50] + "..." if len(chunk) > 50 else chunk),
-                        f"BINARY({len(embedding_bytes)} bytes)"
+                        repr(embedding_json)
                     )
                     logger.debug("Executing query: %s", debug_query)
                     
-                    db.execute_query(insert_query, (document_id, chunk, embedding_bytes))
+                    db.execute_query(insert_query, (document_id, chunk, embedding_json))
                 
                 logger.info("Successfully inserted %d chunks for document_id %d", len(data), document_id)
         
@@ -288,6 +309,7 @@ def main():
     parser.add_argument("--document_id", type=int, required=True, help="Unique identifier for the document")
     parser.add_argument("--chunks_only", action="store_true", help="Only create chunks, don't generate embeddings")
     parser.add_argument("--store_embeddings", action="store_true", help="Store existing embeddings from JSON file into SingleStore")
+    parser.add_argument("--create_embeddings", action="store_true", help="Create embeddings from an existing markdown file")
     
     args = parser.parse_args()
     
@@ -312,6 +334,16 @@ def main():
                 logger.info("Created chunks in markdown file: %s", md_path)
             else:
                 logger.info("Input is already markdown, no chunk creation needed")
+            return
+            
+        if args.create_embeddings:
+            # Create embeddings from existing markdown file
+            if not args.input_file.endswith('.md'):
+                logger.error("Input file must be a markdown file when using --create_embeddings")
+                sys.exit(1)
+            output_json = f"{os.path.splitext(args.input_file)[0]}_embeddings.json"
+            processor.create_embeddings(args.input_file, output_json)
+            logger.info("Created embeddings in JSON file: %s", output_json)
             return
         
         # Full processing with embeddings and DB storage

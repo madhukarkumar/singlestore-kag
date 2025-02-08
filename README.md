@@ -92,7 +92,7 @@ The system uses four main tables in SingleStore:
    GEMINI_API_KEY=your_gemini_api_key
    OPENAI_API_KEY=your_openai_api_key
    PROJECT_ID=your_project_id
-   EMBEDDING_MODEL=text-embedding-3-large
+   EMBEDDING_MODEL=text-embedding-ada-002
 
    # SingleStore Configuration
    SINGLESTORE_HOST=your_host
@@ -104,79 +104,62 @@ The system uses four main tables in SingleStore:
 
 ## Usage
 
-The application provides several command-line options for processing documents:
+The application provides several command-line options for different stages of document processing:
 
-```bash
-# Process a document (PDF or markdown) and create embeddings
-python main.py input_file --document_id ID
+1. **Create Chunks from PDF**
+   ```bash
+   # Convert PDF to markdown with semantic chunks
+   python main.py document.pdf --document_id 1 --chunks_only
+   ```
 
-# Only create chunks without generating embeddings
-python main.py input_file --document_id ID --chunks_only
+2. **Create Embeddings from Markdown**
+   ```bash
+   # Generate embeddings from markdown file
+   python main.py document.md --document_id 1 --create_embeddings
+   ```
 
-# Store existing embeddings from a JSON file into SingleStore
-python main.py input_file --document_id ID --store_embeddings
-```
+3. **Store Embeddings in SingleStore**
+   ```bash
+   # Store existing embeddings from JSON file
+   python main.py document.md --document_id 1 --store_embeddings
+   ```
+
+4. **Full Processing Pipeline**
+   ```bash
+   # Process PDF end-to-end: chunks -> embeddings -> database
+   python main.py document.pdf --document_id 1
+   ```
 
 ### Command Line Arguments
 
-- `input_file`: Path to the input document (PDF or markdown)
+- `input_file`: Path to input document (PDF or markdown)
 - `--document_id`: Unique identifier for the document (required)
 - `--chunks_only`: Only create chunks, don't generate embeddings
+- `--create_embeddings`: Create embeddings from an existing markdown file
 - `--store_embeddings`: Store existing embeddings from JSON file into SingleStore
 
-### Examples
+### Typical Workflow
 
-```bash
-# Process a PDF document
-python main.py documents/sample.pdf --document_id 1
+1. Start with a PDF document:
+   ```bash
+   # First, create semantic chunks
+   python main.py mydoc.pdf --document_id 1 --chunks_only
+   
+   # Then, create embeddings from the markdown
+   python main.py mydoc.md --document_id 1 --create_embeddings
+   
+   # Finally, store embeddings in SingleStore
+   python main.py mydoc.md --document_id 1 --store_embeddings
+   ```
 
-# Process an existing markdown file
-python main.py documents/sample.md --document_id 2
-
-# Only create chunks from a PDF
-python main.py documents/sample.pdf --document_id 3 --chunks_only
-
-# Store embeddings from an existing JSON file
-python main.py documents/sample.md --document_id 4 --store_embeddings
-```
-
-Note: When using `--store_embeddings`, the tool expects to find a JSON file with the same name as your input file but with `_embeddings.json` suffix. For example, if your input file is `sample.md`, it will look for `sample_embeddings.json`.
-
-### 1. Step-by-Step Processing
-
-Process documents one step at a time:
-
-```bash
-# 1. Convert PDF to markdown and create chunks
-python main.py --pdf path/to/document.pdf --document_id 1
-
-# 2. Process existing markdown file
-python main.py --markdown path/to/document.md --document_id 1
-```
-
-### 2. End-to-End Workflow
-
-Process documents through the complete pipeline:
-
-```bash
-python run_workflow.py --input path/to/document.pdf --document_id 1
-```
-
-### 3. Programmatic Usage
-
-```python
-from main import DocumentProcessor
-
-# Initialize processor
-processor = DocumentProcessor()
-
-# Process a document
-results = processor.process_document("document.pdf", document_id=1)
-
-print(f"Processed {results['chunks_count']} chunks")
-print(f"Markdown file: {results['markdown_path']}")
-print(f"Embeddings file: {results['embeddings_path']}")
-```
+2. Start with a markdown document:
+   ```bash
+   # Create embeddings from markdown
+   python main.py mydoc.md --document_id 1 --create_embeddings
+   
+   # Store embeddings in SingleStore
+   python main.py mydoc.md --document_id 1 --store_embeddings
+   ```
 
 ## API Reference
 
@@ -234,10 +217,24 @@ class DatabaseConnection:
    - Always use the OpenAI client instance for API calls
    - Reference: [OpenAI Migration Guide](https://github.com/openai/openai-python/discussions/742)
 
-2. **Embedding Models**
-   - Default model: `text-embedding-3-large` (3072 dimensions)
-   - Legacy model: `text-embedding-ada-002` (1536 dimensions)
-   - Always verify vector dimensions match database schema
+2. **Embedding Models and SingleStore Compatibility**
+   - Using `text-embedding-ada-002` (1536 dimensions) to match schema
+   - Schema configuration:
+     ```sql
+     -- In schema.sql
+     embedding VECTOR(1536)  -- Matches text-embedding-ada-002 dimensions
+     ```
+   - SingleStore expects vectors as JSON arrays:
+     ```python
+     # Convert embedding to JSON array string
+     embedding_json = json.dumps(embedding_list)
+     
+     # Insert into SingleStore
+     db.execute("INSERT ... VALUES (%s)", embedding_json)
+     ```
+   - To use a different model, update both:
+     1. The EMBEDDING_MODEL environment variable
+     2. The VECTOR dimensions in schema.sql
 
 ### Document Processing
 
