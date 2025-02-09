@@ -1,13 +1,18 @@
+
+
 CREATE TABLE Document_Embeddings (
   embedding_id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  doc_id BIGINT NOT NULL,               -- references Documents.doc_id (not enforced)
-  content TEXT,                         -- textual content for full-text search
-  embedding VECTOR(1536),               -- high-dimensional embedding vector (F32 elements by default)&#8203;:contentReference[oaicite:10]{index=10}
-  FULLTEXT USING VERSION 2 content_ft_idx (content)  -- full-text index on content&#8203;:contentReference[oaicite:11]{index=11}&#8203;:contentReference[oaicite:12]{index=12}
+  doc_id       BIGINT NOT NULL,
+  content      TEXT,
+  embedding    VECTOR(1536),
+  SORT KEY(),  -- Ensure this is a columnstore table&#8203;:contentReference[oaicite:11]{index=11}
+  FULLTEXT USING VERSION 2 content_ft_idx (content),  -- Full-Text index (v2) on content&#8203;:contentReference[oaicite:12]{index=12}
+  VECTOR INDEX embedding_vec_idx (embedding)          -- Vector index on embedding column&#8203;:contentReference[oaicite:13]{index=13}
+    INDEX_OPTIONS '{ "index_type": "HNSW_FLAT", "metric_type": "DOT_PRODUCT" }'
 );
-ALTER TABLE Document_Embeddings
-  ADD VECTOR INDEX idx_vec (embedding) 
-    INDEX_OPTIONS '{"index_type": "HNSW_FLAT", "metric_type": "EUCLIDEAN_DISTANCE"}';
+
+ALTER TABLE Entities
+  ADD FULLTEXT USING VERSION 2 ft_idx_name (name);
 
 
 CREATE TABLE Documents (
@@ -39,7 +44,24 @@ CREATE TABLE Relationships (
     -- Make the primary key composite to include the shard key columns:
     PRIMARY KEY (entity_id, name),
     -- Shard key now includes the name column for local uniqueness enforcement:
-    SHARD KEY (entity_id, name)
-    -- We have effectively included `name` in the primary key, satisfying the 
-    -- unique constraint requirement on name under SingleStore's rules.
+    SHARD KEY (entity_id, name),
+    -- Add FULLTEXT index for name search
+    FULLTEXT USING VERSION 2 name_ft_idx (name)
 );
+
+
+SHOW INDEXES FROM Document_Embeddings;
+
+
+
+
+OPTIMIZE TABLE Document_Embeddings FLUSH;  -- Ensure recent data is indexed
+
+SELECT
+    doc_id,
+    content,
+    MATCH (TABLE Document_Embeddings) AGAINST ('How does SingleStore support hybrid search in RAG?') AS score
+FROM Document_Embeddings
+WHERE MATCH (TABLE Document_Embeddings) AGAINST ('How does SingleStore support hybrid search in RAG?')
+ORDER BY score DESC
+LIMIT 10;

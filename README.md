@@ -191,6 +191,57 @@ The application provides several command-line options for different stages of do
    python knowledge_graph.py --doc_id 1
    ```
 
+## SingleStore Full-Text Search Implementation
+
+### Query Syntax
+
+The system implements SingleStore's full-text search capabilities with the following syntax:
+
+```sql
+MATCH(TABLE table_name) AGAINST(search_expression)
+```
+
+Key implementation details:
+
+1. **Column Prefixes**
+   - Use `content:` prefix for searching document content
+   - Use `name:` prefix for searching entity names
+   - Example: `content:("how to use singlestore")`
+
+2. **Query Formatting**
+   - Wrap search terms in parentheses and quotes
+   - Correct: `content:("search terms")`
+   - Incorrect: `content:search terms` or `"content:(search terms)"`
+
+3. **SQL Parameter Binding**
+   ```python
+   # Correct implementation
+   formatted_query = f'content:("{query}")'
+   sql = """
+       SELECT *
+       FROM Documents
+       WHERE MATCH(TABLE Documents) AGAINST(%s)
+   """
+   db.execute_query(sql, (formatted_query,))
+   ```
+
+4. **Common Pitfalls**
+   - Avoid manual quoting in SQL template (use %s without quotes)
+   - Let database driver handle parameter quoting
+   - Keep full-text index up to date for optimal performance
+
+### Hybrid Search Implementation
+
+The system combines three search approaches:
+1. Vector similarity search using HNSW index
+2. Full-text search using SingleStore's MATCH syntax
+3. Knowledge graph traversal for related entities
+
+This hybrid approach provides:
+- Semantic understanding through vector search
+- Keyword matching through full-text search
+- Contextual relationships through graph traversal
+
 ## Project Status
 
 ### Completed Features 

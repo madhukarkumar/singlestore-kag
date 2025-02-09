@@ -26,6 +26,7 @@ var/
 # Generated files
 documents/*_embeddings.txt
 documents/*.md
+debug_output/
 
 # IDE
 .idea/
