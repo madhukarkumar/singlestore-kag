@@ -274,14 +274,20 @@ This hybrid approach provides:
 ### In Progress 
 
 1. **Query Interface**
-   - Design API endpoints
-   - Implement hybrid search (vector + graph)
-   - Create query optimization layer
+   - [x] Design core query engine
+   - [x] Implement vector similarity search
+   - [x] Add knowledge graph traversal
+   - [x] Create hybrid search capabilities
+   - [x] Implement command-line interface
+   - [ ] Design REST API endpoints
+   - [ ] Add authentication system
+   - [ ] Implement rate limiting
+   - [ ] Create API documentation
 
 2. **API Development**
-   - Document insertion endpoint
-   - Knowledge graph query endpoint
-   - Vector similarity search endpoint
+   - [ ] Document insertion endpoint
+   - [ ] Knowledge graph query endpoint
+   - [ ] Vector similarity search endpoint
 
 ## Roadmap
 
@@ -298,10 +304,15 @@ This hybrid approach provides:
 - [x] Store and index graph in SingleStore
 
 ### Phase 3: Query Interface 
+- [x] Design core query engine
+- [x] Implement vector similarity search
+- [x] Add knowledge graph traversal
+- [x] Create hybrid search capabilities
+- [x] Implement command-line interface
 - [ ] Design REST API endpoints
-- [ ] Implement vector similarity search
-- [ ] Add knowledge graph traversal
-- [ ] Create hybrid search capabilities
+- [ ] Add authentication system
+- [ ] Implement rate limiting
+- [ ] Create API documentation
 
 ### Phase 4: Production Ready 
 - [ ] Add authentication and rate limiting
