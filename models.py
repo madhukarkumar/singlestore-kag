@@ -2,6 +2,7 @@
 
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
+from datetime import datetime
 
 class Entity(BaseModel):
     """Entity model representing items in the knowledge graph."""
@@ -98,3 +99,18 @@ class GraphResponse(BaseModel):
     """Response model for graph data endpoint."""
     data: GraphData
     execution_time: float
+
+class ProcessingStatus(BaseModel):
+    doc_id: int
+    file_name: str
+    file_path: str
+    file_size: int
+    current_step: str
+    error_message: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+class ProcessingStatusResponse(BaseModel):
+    currentStep: str
+    errorMessage: Optional[str] = None
+    fileName: str

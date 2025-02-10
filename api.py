@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import logging
@@ -9,6 +9,8 @@ from db import DatabaseConnection
 import time
 from models import SearchRequest, SearchResponse, SearchResult, Entity, Relationship, KBDataResponse, KBStats, DocumentStats, GraphResponse, GraphData, GraphNode, GraphLink
 from datetime import datetime
+import asyncio
+from pdf_processing import save_pdf, create_document_record, process_pdf, get_processing_status, cleanup_processing, PDFProcessingError
 
 # Initialize logging
 logger = logging.getLogger(__name__)
@@ -245,3 +247,52 @@ async def get_graph_data():
             status_code=500,
             detail=f"Error retrieving graph data: {str(e)}"
         )
+
+@app.post("/upload-pdf")
+async def upload_pdf(file: UploadFile = File(...)):
+    try:
+        if not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+        
+        # Read file content
+        file_content = await file.read()
+        
+        try:
+            # Save PDF file
+            file_path = save_pdf(file_content, file.filename)
+            
+            # Create document record
+            doc_id = create_document_record(
+                filename=file.filename,
+                file_path=file_path,
+                file_size=len(file_content)
+            )
+            
+            # Start processing in background
+            asyncio.create_task(process_pdf(doc_id))
+            
+            return {"doc_id": doc_id}
+            
+        except PDFProcessingError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/processing-status/{doc_id}")
+async def get_status(doc_id: int):
+    try:
+        status = get_processing_status(doc_id)
+        if not status:
+            raise HTTPException(status_code=404, detail="Processing status not found")
+        return status
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/cancel-processing/{doc_id}")
+async def cancel_processing(doc_id: int):
+    try:
+        cleanup_processing(doc_id)
+        return {"status": "cancelled"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

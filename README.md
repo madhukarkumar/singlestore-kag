@@ -29,6 +29,74 @@ A full-stack application that processes documents to create semantic embeddings 
   - Interactive knowledge graph visualization
   - Chunk distribution analysis
 
+## Installation and Setup
+
+### Prerequisites
+
+- Python 3.12.9
+- Node.js 18+ and pnpm
+- SingleStore database
+- OpenAI API key
+- Google Gemini API key
+
+### Backend Setup
+
+1. **Environment Setup**
+   ```bash
+   # Create and activate virtual environment
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   
+   # Install dependencies
+   pip install -r requirements.txt
+   ```
+
+2. **Environment Configuration**
+   Create a `.env` file in the project root:
+   ```env
+   OPENAI_API_KEY=your_openai_key
+   GEMINI_API_KEY=your_gemini_key
+   SINGLESTORE_HOST=your_host
+   SINGLESTORE_PORT=your_port
+   SINGLESTORE_USER=your_user
+   SINGLESTORE_PASSWORD=your_password
+   SINGLESTORE_DATABASE=your_database
+   ```
+
+3. **Database Setup**
+   ```bash
+   # Initialize SingleStore schema
+   mysql -h <host> -u <user> -p <database> < schema.sql
+   ```
+
+4. **Start Backend Server**
+   ```bash
+   # Start the FastAPI server
+   uvicorn api:app --reload
+   
+   # API will be available at http://localhost:8000
+   # Swagger docs at http://localhost:8000/docs
+   ```
+
+### Frontend Setup
+
+1. **Install Dependencies**
+   ```bash
+   # Navigate to frontend directory
+   cd frontend
+   
+   # Install packages
+   pnpm install
+   ```
+
+2. **Start Development Server**
+   ```bash
+   # Start Next.js dev server
+   pnpm dev
+   
+   # Frontend will be available at http://localhost:3000
+   ```
+
 ## System Architecture
 
 ### Backend Components
@@ -87,93 +155,21 @@ The system uses four main tables in SingleStore:
    - Source document links
    - Hash indexes for quick lookups
 
-## Setup and Installation
-
-### Prerequisites
-
-- Python 3.12.9
-- Node.js 18+ and pnpm
-- SingleStore database
-- OpenAI API key
-- Google Gemini API key
-
-### Backend Setup
-
-1. **Python Environment Setup**
-   ```bash
-   # Create and activate virtual environment
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   
-   # Install dependencies
-   pip install -r requirements.txt
-   ```
-
-2. **Environment Configuration**
-   Create a `.env` file in the project root:
-   ```env
-   OPENAI_API_KEY=your_openai_key
-   GEMINI_API_KEY=your_gemini_key
-   SINGLESTORE_HOST=your_host
-   SINGLESTORE_PORT=your_port
-   SINGLESTORE_USER=your_user
-   SINGLESTORE_PASSWORD=your_password
-   SINGLESTORE_DATABASE=your_database
-   ```
-
-3. **Database Setup**
-   ```bash
-   # Connect to SingleStore and run schema
-   mysql -h <host> -u <user> -p <database> < schema.sql
-   ```
-
-### Frontend Setup
-
-1. **Install Dependencies**
-   ```bash
-   cd frontend
-   pnpm install
-   ```
-
-2. **Environment Configuration**
-   The frontend is pre-configured to connect to the backend at `http://localhost:8000`.
-
-## Running the Application
-
-1. **Start the Backend Server**
-   ```bash
-   # From the project root
-   uvicorn api:app --reload
-   ```
-   The API will be available at `http://localhost:8000`
-
-2. **Start the Frontend Development Server**
-   ```bash
-   # In a new terminal, from the frontend directory
-   cd frontend
-   pnpm dev
-   ```
-   The web interface will be available at `http://localhost:3000`
-
 ## Usage
 
-### Processing Documents
+### Document Processing
 
 1. **Add a New Document**
    ```bash
    python main.py path/to/document.pdf --document_id 1
    ```
-   This will:
-   - Convert PDF to markdown with semantic chunks
-   - Generate embeddings
-   - Store in SingleStore
 
 2. **Generate Knowledge Graph**
    ```bash
    python knowledge_graph.py --doc_id 1
    ```
 
-### Using the Search Interface
+### Search Interface
 
 1. Open `http://localhost:3000` in your browser
 2. Enter your search query
@@ -189,59 +185,39 @@ Access the interactive API documentation at `http://localhost:8000/docs`
 
 ### Key Endpoints
 
-- `POST /kag-search`
-  - Search documents using natural language queries
+- `POST /kag-search`: Search documents using natural language queries
   - Parameters:
     - `query`: Search query string
     - `top_k`: Number of results (default: 5)
     - `debug`: Enable debug mode (default: false)
 
-- `GET /kbdata`
-  - Retrieves knowledge base statistics
-  - Returns:
-    - Total documents, chunks, entities, and relationships
-    - Per-document statistics
-    - Entity and relationship distribution
-    - Last update timestamp
+- `GET /kbdata`: Retrieve knowledge base statistics
 
-- `GET /graph-data`
-  - Retrieves knowledge graph visualization data
-  - Returns:
-    - Nodes: Entities with categories and connection counts
-    - Links: Relationships with types and weights
-    - Graph metadata for visualization
+## Troubleshooting
 
-## Frontend Pages
+### Common Issues
 
-1. **Search Interface (/)**
-   - Real-time search with hybrid results
-   - Entity highlighting and relationship display
-   - AI-generated responses
+1. **Connection Issues**
+   - Verify SingleStore credentials in `.env`
+   - Check if database is accessible
+   - Confirm port settings
 
-2. **Knowledge Base Dashboard (/kb)**
-   - Statistics overview with key metrics
-   - Interactive force-directed graph visualization
-   - Document table with detailed statistics
-   - Real-time updates and responsive design
+2. **Search Issues**
+   - Verify document embeddings exist
+   - Check vector dimensions match (1536)
+   - Ensure full-text index is enabled
 
-## Development Status
+3. **API Issues**
+   - Check if backend server is running
+   - Verify API endpoints are accessible
+   - Review server logs for errors
 
-### Completed Features
-- [x] Document processing pipeline
-- [x] Vector embeddings and storage
-- [x] Knowledge graph generation
-- [x] Hybrid search implementation
-- [x] FastAPI backend
-- [x] Next.js frontend
-- [x] Basic error handling and logging
+### Getting Help
 
-### Planned Enhancements
-- [ ] Authentication system
-- [ ] Rate limiting
-- [ ] Batch document processing
-- [ ] Advanced visualization
-- [ ] Query caching
-- [ ] Enhanced entity resolution
+For additional help or to report issues:
+1. Check the documentation in `/docs`
+2. Review server logs
+3. Submit an issue with detailed error information
 
 ## Contributing
 
@@ -250,93 +226,6 @@ Contributions are welcome! Please read our contributing guidelines before submit
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Setup, Run Instructions, and Testing Details
-
-### Setup
-
-1. **Clone the Repository**
-   ```bash
-   git clone https://github.com/yourusername/singlestore-kag.git
-   cd singlestore-kag
-   ```
-
-2. **Backend Setup**
-   ```bash
-   # Create and activate virtual environment
-   python -m venv venv
-   source venv/bin/activate  # On Windows: .\venv\Scripts\activate
-
-   # Install dependencies
-   pip install -r requirements.txt
-
-   # Set up environment variables
-   cp .env.example .env
-   # Edit .env with your API keys and database credentials
-   ```
-
-3. **Frontend Setup**
-   ```bash
-   cd frontend
-   npm install
-   ```
-
-4. **Database Setup**
-   ```sql
-   -- Run these in your SingleStore console
-   CREATE DATABASE knowledge_graph;
-   USE knowledge_graph;
-
-   -- Create tables (see schema.sql for full schema)
-   CREATE TABLE Documents (...);
-   CREATE TABLE Document_Embeddings (...);
-   CREATE TABLE Entities (...);
-   CREATE TABLE Relationships (...);
-   ```
-
-### Running the Application
-
-1. **Start the Backend**
-   ```bash
-   # From project root
-   uvicorn api:app --reload
-   ```
-   Backend will run on http://localhost:8000
-
-2. **Start the Frontend**
-   ```bash
-   # From frontend directory
-   npm run dev
-   ```
-   Frontend will run on http://localhost:3000
-
-### Testing End-to-End Retrieval
-
-1. **Via Web Interface**
-   - Open http://localhost:3000 in your browser
-   - Enter a search query
-   - View results with:
-     - Document matches
-     - Relevance scores
-     - Entity highlights
-     - AI-generated response
-
-2. **Via API**
-   ```bash
-   # Example cURL request
-   curl -X POST http://localhost:8000/kag-search \
-     -H "Content-Type: application/json" \
-     -d '{
-       "query": "how do you use ai with singlestore",
-       "top_k": 5,
-       "debug": false
-     }'
-   ```
-
-3. **Sample Queries**
-   - "How does SingleStore handle vector search?"
-   - "What are the key features of SingleStore's AI capabilities?"
-   - "Explain SingleStore's integration with OpenAI"
 
 ## Project Structure
 
@@ -372,33 +261,21 @@ SINGLESTORE_DATABASE=your_db_name
 - Database uses SingleStore with HNSW vector index
 - API documentation available at http://localhost:8000/docs
 
-## Troubleshooting
+## Development Status
 
-Common issues and solutions:
+### Completed Features
+- [x] Document processing pipeline
+- [x] Vector embeddings and storage
+- [x] Knowledge graph generation
+- [x] Hybrid search implementation
+- [x] FastAPI backend
+- [x] Next.js frontend
+- [x] Basic error handling and logging
 
-1. **Connection Errors**
-   - Verify database credentials in `.env`
-   - Ensure SingleStore is running
-   - Check CORS settings if frontend can't connect
-
-2. **Search Issues**
-   - Verify document embeddings exist
-   - Check vector dimensions match (1536)
-   - Ensure full-text index is enabled
-
-3. **Entity Issues**
-   - Verify entity extraction is working
-   - Check entity IDs are consistent
-   - Validate relationship mappings
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+### Planned Enhancements
+- [ ] Authentication system
+- [ ] Rate limiting
+- [ ] Batch document processing
+- [ ] Advanced visualization
+- [ ] Query caching
+- [ ] Enhanced entity resolution

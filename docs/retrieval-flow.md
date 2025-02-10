@@ -89,29 +89,194 @@ graph TD
   - Relationship context
 - Returns formatted response
 
+## Example Retrieval Flow
+
+Let's walk through a complete example using the query "hello world" to understand how each component works together.
+
+### 1. Initial Hybrid Search
+```sql
+-- Combines vector similarity with text relevance
+SELECT 
+    chunk_text,
+    dot_product(chunk_embedding, query_embedding) as vector_score,
+    MATCH(chunk_text) AGAINST('hello world') as text_score
+FROM Document_Embeddings
+ORDER BY (0.7 * vector_score + 0.3 * text_score) DESC
+LIMIT 5;
+```
+
+Example results:
+```python
+chunks = [
+    "Hello World is a common first program...",
+    "The Hello World program originated in 1972...",
+    "Brian Kernighan wrote about Hello World in the C Programming Language book...",
+    "Java's Hello World example demonstrates object orientation...",
+    "Python makes Hello World simple with print()..."
+]
+```
+
+### 2. Entity Processing
+The system analyzes both the query and retrieved chunks to identify entities:
+
+- Extracted Entities:
+  * "Hello World" (programming concept)
+  * "Brian Kernighan" (person)
+  * "C Programming Language" (programming language)
+  * "Java" (programming language)
+  * "Python" (programming language)
+
+```sql
+-- Entity Resolution Query
+SELECT entity_id, name, category, metadata
+FROM Entities
+WHERE name IN ('Hello World', 'Brian Kernighan', 'C Programming Language', 'Java', 'Python');
+```
+
+### 3. Relationship Discovery
+```sql
+-- Find connections between entities
+SELECT source_entity_id, target_entity_id, relation_type, metadata
+FROM Relationships
+WHERE source_entity_id IN (found_entity_ids)
+OR target_entity_id IN (found_entity_ids);
+```
+
+Example relationships found:
+- "Brian Kernighan" -> "created" -> "Hello World"
+- "C Programming Language" -> "introduced" -> "Hello World"
+- "Brian Kernighan" -> "authored" -> "C Programming Language"
+
+### 4. Result Merging
+The final context combines search results, entities, and relationships:
+
+```python
+final_results = {
+    'search_results': [
+        {
+            'chunk_text': chunk,
+            'relevance_score': score,
+            'entities': [entities_in_chunk],
+            'relationships': [relevant_relationships]
+        }
+        for chunk, score in search_results
+    ],
+    'entities': {
+        'primary': ['Hello World'],  # From query
+        'related': ['Brian Kernighan', 'C Programming Language']  # From context
+    },
+    'relationships': [
+        {
+            'source': 'Brian Kernighan',
+            'relation': 'created',
+            'target': 'Hello World',
+            'confidence': 0.95
+        }
+        # ... more relationships
+    ]
+}
+```
+
+### 5. Final Context Assembly
+The enriched context for LLM prompt generation:
+
+```python
+context = f"""
+Relevant Information:
+{top_chunks_with_scores}
+
+Key Entities:
+- Hello World (Programming Concept)
+- Brian Kernighan (Person, Creator)
+
+Important Relationships:
+- Brian Kernighan created Hello World in 1972
+- Hello World was first introduced in C Programming Language
+"""
+```
+
+This example demonstrates how the system:
+1. Combines vector and keyword search for initial retrieval
+2. Enriches results with entity information
+3. Adds relationship context
+4. Assembles a comprehensive context for response generation
+
+The final response will include not just the directly relevant text matches, but also broader context about entities and their relationships, providing a more complete and informative answer.
+
 ## Database Schema
 
+Important Note: SingleStore does not support foreign keys. All references between tables (e.g., doc_id, entity_id) are logical and must be maintained at the application level.
+
 ### Document_Embeddings Table
-- Stores document chunks
-- Vector embeddings (HNSW index)
-- Full-text search enabled
+```sql
+CREATE TABLE Document_Embeddings (
+    embedding_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    doc_id BIGINT NOT NULL,        -- Logical reference to Documents.doc_id
+    content TEXT,
+    embedding VECTOR(1536),
+    SORT KEY(),
+    FULLTEXT USING VERSION 2 content_ft_idx (content),    -- Full-Text index (v2) on content
+    VECTOR INDEX embedding_vec_idx (embedding)            -- Vector index on embedding column
+        INDEX_OPTIONS '{ "index_type": "HNSW_FLAT", "metric_type": "DOT_PRODUCT" }'
+);
+```
 
 ### Documents Table
-- Document metadata
-- Parent-child relationships
-- Source information
+```sql
+CREATE TABLE Documents (
+    doc_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    title VARCHAR(255),
+    author VARCHAR(100),
+    publish_date DATE,
+    source JSON    -- Other metadata fields (e.g. summary, URL) stored as JSON
+);
+```
 
 ### Entities Table
-- Entity information
-- Categories
-- Descriptions
-- Aliases (JSON array)
+```sql
+CREATE TABLE Entities (
+    entity_id BIGINT NOT NULL AUTO_INCREMENT,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    aliases JSON,
+    category VARCHAR(100),
+    PRIMARY KEY (entity_id, name),    -- Composite primary key including shard key columns
+    SHARD KEY (entity_id, name),      -- Enforce local uniqueness on shard key
+    FULLTEXT USING VERSION 2 name_ft_idx (name)    -- Full-text index for name search
+);
+```
 
 ### Relationships Table
-- Entity relationships
-- Relationship types
-- Document references
-- Additional metadata
+```sql
+CREATE TABLE Relationships (
+    relationship_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    source_entity_id BIGINT NOT NULL,    -- Logical reference to Entities.entity_id
+    target_entity_id BIGINT NOT NULL,    -- Logical reference to Entities.entity_id
+    relation_type VARCHAR(100),
+    doc_id BIGINT,                       -- Logical reference to Documents.doc_id
+    KEY (source_entity_id) USING HASH,   -- Index for quickly finding relationships by source
+    KEY (target_entity_id) USING HASH,   -- Index for quickly finding relationships by target
+    KEY (doc_id)                         -- Index for querying relationships by document
+);
+```
+
+### Key Design Considerations
+
+1. **Referential Integrity**:
+   - No foreign key constraints (SingleStore limitation)
+   - Application code must maintain data consistency
+   - Joins are performed without enforced relationships
+
+2. **Indexing Strategy**:
+   - HNSW_FLAT vector index for embeddings
+   - FULLTEXT VERSION 2 for text search capabilities
+   - HASH indexes for relationship lookups
+   - Regular indexes for document references
+
+3. **Performance Optimizations**:
+   - Composite primary key in Entities table
+   - Shard key for distributed data
+   - Strategic index placement for common queries
 
 ## Technologies Used
 

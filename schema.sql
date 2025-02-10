@@ -1,5 +1,3 @@
-
-
 CREATE TABLE Document_Embeddings (
   embedding_id BIGINT PRIMARY KEY AUTO_INCREMENT,
   doc_id       BIGINT NOT NULL,
@@ -13,7 +11,6 @@ CREATE TABLE Document_Embeddings (
 
 ALTER TABLE Entities
   ADD FULLTEXT USING VERSION 2 ft_idx_name (name);
-
 
 CREATE TABLE Documents (
   doc_id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -35,7 +32,7 @@ CREATE TABLE Relationships (
   KEY (doc_id)                      -- index for querying relationships by document
 );
 
- CREATE TABLE Entities (
+CREATE TABLE Entities (
     entity_id BIGINT NOT NULL AUTO_INCREMENT,
     name VARCHAR(255) NOT NULL,
     description TEXT,
@@ -49,11 +46,19 @@ CREATE TABLE Relationships (
     FULLTEXT USING VERSION 2 name_ft_idx (name)
 );
 
+CREATE TABLE ProcessingStatus (
+    doc_id BIGINT PRIMARY KEY,
+    file_name VARCHAR(255) NOT NULL UNIQUE,
+    file_path VARCHAR(512) NOT NULL,
+    file_size BIGINT NOT NULL,
+    current_step ENUM('started', 'chunking', 'embeddings', 'entities', 'relationships', 'completed', 'failed') NOT NULL,
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (doc_id) REFERENCES Documents(doc_id) ON DELETE CASCADE
+);
 
 SHOW INDEXES FROM Document_Embeddings;
-
-
-
 
 OPTIMIZE TABLE Document_Embeddings FLUSH;  -- Ensure recent data is indexed
 
