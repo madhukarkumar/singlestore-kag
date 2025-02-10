@@ -40,7 +40,8 @@ class KnowledgeGraphGenerator:
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         if not self.openai_api_key:
             raise ValueError("OPENAI_API_KEY environment variable is required")
-        self.client = openai.OpenAI()
+        openai.api_key = self.openai_api_key
+        self.client = openai
         
         # Debug configuration
         self.debug_output = debug_output
@@ -90,7 +91,7 @@ Text Chunk (ID: {chunk_id} from Document ID: {doc_id}):
 
 Output only valid JSON, no other text:"""
 
-    def extract_knowledge(self, text: str, doc_id: int, chunk_id: int) -> Dict:
+    async def extract_knowledge(self, text: str, doc_id: int, chunk_id: int) -> Dict:
         """
         Extract entities and relationships from a text chunk using OpenAI.
         
@@ -111,7 +112,7 @@ Output only valid JSON, no other text:"""
             )
             
             # Call OpenAI API
-            response = self.client.chat.completions.create(
+            response = self.client.ChatCompletion.create(
                 model="gpt-4-0125-preview",  # Using latest model for best extraction
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0,  # Deterministic output
@@ -171,7 +172,7 @@ Output only valid JSON, no other text:"""
         except Exception as e:
             logger.warning(f"Failed to save debug output: {str(e)}")
     
-    def store_knowledge(self, knowledge: Dict, db: DatabaseConnection) -> None:
+    async def store_knowledge(self, knowledge: Dict, db: DatabaseConnection) -> None:
         """
         Store extracted knowledge in SingleStore.
         
@@ -224,7 +225,7 @@ Output only valid JSON, no other text:"""
             logger.error(f"Error storing knowledge in database: {str(e)}")
             raise
     
-    def process_document(self, doc_id: int) -> None:
+    async def process_document(self, doc_id: int) -> None:
         """
         Process all chunks from a document to extract and store knowledge.
         
@@ -248,13 +249,13 @@ Output only valid JSON, no other text:"""
                     
                     # Extract knowledge
                     logger.info(f"Processing chunk {chunk_id} from document {doc_id}")
-                    knowledge = self.extract_knowledge(chunk_text, doc_id, chunk_id)
+                    knowledge = await self.extract_knowledge(chunk_text, doc_id, chunk_id)
                     
                     # Save debug output
                     self.save_debug_output(knowledge, doc_id, chunk_id)
                     
                     # Store knowledge
-                    self.store_knowledge(knowledge, db)
+                    await self.store_knowledge(knowledge, db)
                     
                 logger.info(f"Successfully processed document {doc_id}")
                 
@@ -262,7 +263,7 @@ Output only valid JSON, no other text:"""
             logger.error(f"Error processing document {doc_id}: {str(e)}")
             raise
 
-def main():
+async def main():
     """Command line interface for knowledge graph generation."""
     import argparse
     
@@ -274,7 +275,7 @@ def main():
     
     try:
         generator = KnowledgeGraphGenerator(debug_output=args.debug)
-        generator.process_document(args.doc_id)
+        await generator.process_document(args.doc_id)
         logger.info("Knowledge graph generation completed successfully")
         
     except Exception as e:
@@ -282,4 +283,5 @@ def main():
         raise
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())

@@ -3,7 +3,7 @@ import fitz  # PyMuPDF
 from datetime import datetime
 from typing import Optional, Tuple
 from pathlib import Path
-from db import get_connection
+from db import DatabaseConnection
 from models import ProcessingStatus
 
 DOCUMENTS_DIR = Path("documents")
@@ -48,7 +48,7 @@ def save_pdf(file_data: bytes, filename: str) -> str:
 
 def create_document_record(filename: str, file_path: str, file_size: int) -> int:
     """Create initial document record and return doc_id"""
-    with get_connection() as conn:
+    with DatabaseConnection() as conn:
         with conn.cursor() as cursor:
             # Create document record
             cursor.execute(
@@ -74,7 +74,7 @@ def create_document_record(filename: str, file_path: str, file_size: int) -> int
 
 def update_processing_status(doc_id: int, step: str, error_message: Optional[str] = None):
     """Update processing status for a document"""
-    with get_connection() as conn:
+    with DatabaseConnection() as conn:
         with conn.cursor() as cursor:
             cursor.execute(
                 """
@@ -87,7 +87,7 @@ def update_processing_status(doc_id: int, step: str, error_message: Optional[str
 
 def get_processing_status(doc_id: int) -> dict:
     """Get current processing status"""
-    with get_connection() as conn:
+    with DatabaseConnection() as conn:
         with conn.cursor() as cursor:
             cursor.execute(
                 """
@@ -108,7 +108,7 @@ def get_processing_status(doc_id: int) -> dict:
 
 def cleanup_processing(doc_id: int):
     """Clean up processing data for cancelled/failed jobs"""
-    with get_connection() as conn:
+    with DatabaseConnection() as conn:
         with conn.cursor() as cursor:
             # Get file path
             cursor.execute(
@@ -135,7 +135,7 @@ async def process_pdf(doc_id: int):
     """
     try:
         # Get file path
-        with get_connection() as conn:
+        with DatabaseConnection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
                     "SELECT file_path FROM ProcessingStatus WHERE doc_id = %s",

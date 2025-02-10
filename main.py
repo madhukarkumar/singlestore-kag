@@ -7,7 +7,7 @@ import numpy as np
 from db import DatabaseConnection
 
 import requests
-import openai
+from openai import Client as OpenAIClient
 from dotenv import load_dotenv
 from PyPDF2 import PdfReader
 import google.generativeai as genai
@@ -34,11 +34,10 @@ class DocumentProcessor:
         self._validate_env_vars()
         
         # Configure APIs
-        openai.api_key = self.openai_api_key
         genai.configure(api_key=self.gemini_api_key)
         
         # Initialize OpenAI client
-        self.openai_client = openai.OpenAI()
+        self.openai_client = OpenAIClient(api_key=self.openai_api_key)
         
         # Initialize Gemini model
         self.gemini_model = genai.GenerativeModel('gemini-2.0-flash')
@@ -142,7 +141,7 @@ class DocumentProcessor:
                 
             try:
                 # Generate embedding using the OpenAI client (1.0.0+ syntax)
-                response = self.openai_client.embeddings.create(
+                response = self.openai_client.Embeddings.create(
                     input=chunk,
                     model=self.embedding_model
                 )

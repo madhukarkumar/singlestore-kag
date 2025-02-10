@@ -202,12 +202,43 @@ Access the interactive API documentation at `http://localhost:8000/docs`
    - Check if database is accessible
    - Confirm port settings
 
-2. **Search Issues**
+2. **OpenAI Client Issues**
+   - If you see `TypeError: Client.__init__() got an unexpected keyword argument 'proxies'`:
+     1. Downgrade httpx to version 0.27.0: `pip install httpx==0.27.0`
+     2. This error occurs because httpx 0.28.0+ removed the `proxies` argument support
+
+   - For OpenAI client initialization:
+     1. Use `from openai import OpenAI` and initialize with `OpenAI()` for modern API
+     2. For embedding generation, use `client.embeddings.create()`
+     3. For chat completions, use `client.chat.completions.create()`
+     4. Let OpenAI client automatically use `OPENAI_API_KEY` from environment variables
+
+   Example of correct OpenAI client usage:
+   ```python
+   from openai import OpenAI
+   
+   # Modern initialization (preferred)
+   client = OpenAI()  # Will use OPENAI_API_KEY from env
+   
+   # For embeddings
+   response = client.embeddings.create(
+       input=text,
+       model="text-embedding-ada-002"
+   )
+   
+   # For chat completions
+   response = client.chat.completions.create(
+       model="gpt-4",
+       messages=[{"role": "user", "content": prompt}]
+   )
+   ```
+
+3. **Search Issues**
    - Verify document embeddings exist
    - Check vector dimensions match (1536)
    - Ensure full-text index is enabled
 
-3. **API Issues**
+4. **API Issues**
    - Check if backend server is running
    - Verify API endpoints are accessible
    - Review server logs for errors

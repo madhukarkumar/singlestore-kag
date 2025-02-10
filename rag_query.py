@@ -9,15 +9,16 @@ to answer natural language queries with citations.
 """
 
 import os
-import json
 import logging
+import json
 import time
 from typing import Dict, List, Optional, Tuple
-import openai
+from openai import OpenAI
 from dotenv import load_dotenv
 from db import DatabaseConnection
-import re
 from models import Entity, Relationship, SearchResult, SearchResponse
+import re
+import datetime
 
 # Configure logging
 logging.basicConfig(
@@ -44,7 +45,7 @@ class RAGQueryEngine:
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         if not self.openai_api_key:
             raise ValueError("OPENAI_API_KEY environment variable is required")
-        self.client = openai.OpenAI()
+        self.client = OpenAI()  # OpenAI will automatically use the OPENAI_API_KEY environment variable
         
         # Debug configuration
         self.debug_output = debug_output

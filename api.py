@@ -10,7 +10,7 @@ import time
 from models import SearchRequest, SearchResponse, SearchResult, Entity, Relationship, KBDataResponse, KBStats, DocumentStats, GraphResponse, GraphData, GraphNode, GraphLink
 from datetime import datetime
 import asyncio
-from pdf_processing import save_pdf, create_document_record, process_pdf, get_processing_status, cleanup_processing, PDFProcessingError
+from pdf_processor import save_pdf, create_document_record, process_pdf, get_processing_status, cleanup_processing, PDFProcessingError
 
 # Initialize logging
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ async def shutdown_event():
     """Close database connection on shutdown."""
     global db
     if db:
-        db.close()
+        db.disconnect()
         logger.info("Database connection closed")
 
 # CORS Configuration
