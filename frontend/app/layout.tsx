@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import Link from "next/link";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -16,7 +17,34 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <body className={inter.className}>
+        <div className="bg-gray-800">
+          <nav className="container mx-auto px-4">
+            <div className="flex items-center justify-between h-16">
+              <div className="flex items-center">
+                <Link href="/" className="text-white font-bold text-xl">
+                  SingleStore KAG
+                </Link>
+                <div className="ml-10 flex items-baseline space-x-4">
+                  <Link
+                    href="/"
+                    className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
+                  >
+                    Search
+                  </Link>
+                  <Link
+                    href="/kb"
+                    className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
+                  >
+                    KB Stats
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </nav>
+        </div>
+        {children}
+      </body>
     </html>
   );
 }

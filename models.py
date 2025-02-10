@@ -48,3 +48,28 @@ class SearchResponse(BaseModel):
     results: List[SearchResult]
     generated_response: Optional[str] = None
     execution_time: float
+
+class DocumentStats(BaseModel):
+    """Statistics for a document in the knowledge base."""
+    doc_id: int
+    title: str
+    total_chunks: int
+    total_entities: int
+    total_relationships: int
+    created_at: str
+    file_type: str
+    status: str = "processed"
+
+class KBStats(BaseModel):
+    """Overall knowledge base statistics."""
+    total_documents: int
+    total_chunks: int
+    total_entities: int
+    total_relationships: int
+    documents: List[DocumentStats]
+    last_updated: str
+
+class KBDataResponse(BaseModel):
+    """Response model for KB statistics endpoint."""
+    stats: KBStats
+    execution_time: float
