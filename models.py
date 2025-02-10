@@ -73,3 +73,28 @@ class KBDataResponse(BaseModel):
     """Response model for KB statistics endpoint."""
     stats: KBStats
     execution_time: float
+
+class GraphNode(BaseModel):
+    """Node in the knowledge graph visualization."""
+    id: str
+    name: str
+    category: str
+    group: int  # For coloring by category
+    val: int = 1  # For node size
+
+class GraphLink(BaseModel):
+    """Link/relationship in the knowledge graph visualization."""
+    source: str
+    target: str
+    type: str
+    value: int = 1  # For link thickness
+
+class GraphData(BaseModel):
+    """Complete graph data for visualization."""
+    nodes: List[GraphNode]
+    links: List[GraphLink]
+
+class GraphResponse(BaseModel):
+    """Response model for graph data endpoint."""
+    data: GraphData
+    execution_time: float

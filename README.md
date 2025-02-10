@@ -22,6 +22,13 @@ A full-stack application that processes documents to create semantic embeddings 
   - Detailed result display with scores and entities
   - Mobile-friendly design
 
+- **Knowledge Base Analytics**
+  - Real-time statistics dashboard
+  - Document-level metrics
+  - Entity and relationship tracking
+  - Interactive knowledge graph visualization
+  - Chunk distribution analysis
+
 ## System Architecture
 
 ### Backend Components
@@ -188,6 +195,34 @@ Access the interactive API documentation at `http://localhost:8000/docs`
     - `query`: Search query string
     - `top_k`: Number of results (default: 5)
     - `debug`: Enable debug mode (default: false)
+
+- `GET /kbdata`
+  - Retrieves knowledge base statistics
+  - Returns:
+    - Total documents, chunks, entities, and relationships
+    - Per-document statistics
+    - Entity and relationship distribution
+    - Last update timestamp
+
+- `GET /graph-data`
+  - Retrieves knowledge graph visualization data
+  - Returns:
+    - Nodes: Entities with categories and connection counts
+    - Links: Relationships with types and weights
+    - Graph metadata for visualization
+
+## Frontend Pages
+
+1. **Search Interface (/)**
+   - Real-time search with hybrid results
+   - Entity highlighting and relationship display
+   - AI-generated responses
+
+2. **Knowledge Base Dashboard (/kb)**
+   - Statistics overview with key metrics
+   - Interactive force-directed graph visualization
+   - Document table with detailed statistics
+   - Real-time updates and responsive design
 
 ## Development Status
 

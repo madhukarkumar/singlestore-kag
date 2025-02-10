@@ -7,7 +7,7 @@ from typing import List, Dict, Optional
 from rag_query import RAGQueryEngine
 from db import DatabaseConnection
 import time
-from models import SearchRequest, SearchResponse, SearchResult, Entity, Relationship, KBDataResponse, KBStats, DocumentStats
+from models import SearchRequest, SearchResponse, SearchResult, Entity, Relationship, KBDataResponse, KBStats, DocumentStats, GraphResponse, GraphData, GraphNode, GraphLink
 from datetime import datetime
 
 # Initialize logging
@@ -167,4 +167,81 @@ async def get_kb_data():
         raise HTTPException(
             status_code=500,
             detail=f"Error retrieving knowledge base data: {str(e)}"
+        )
+
+@app.get("/graph-data", response_model=GraphResponse)
+async def get_graph_data():
+    """Get knowledge graph visualization data."""
+    start_time = time.time()
+    try:
+        with DatabaseConnection() as conn:
+            # Get unique categories and assign group numbers
+            category_query = """
+                SELECT DISTINCT category 
+                FROM Entities 
+                WHERE category IS NOT NULL
+                ORDER BY category
+            """
+            categories = conn.execute_query(category_query)
+            category_to_group = {cat[0]: idx for idx, cat in enumerate(categories, 1)}
+            
+            # Get all entities
+            entity_query = """
+                SELECT 
+                    entity_id,
+                    name,
+                    COALESCE(category, 'unknown') as category,
+                    COUNT(DISTINCT r1.relationship_id) + COUNT(DISTINCT r2.relationship_id) as connection_count
+                FROM Entities e
+                LEFT JOIN Relationships r1 ON e.entity_id = r1.source_entity_id
+                LEFT JOIN Relationships r2 ON e.entity_id = r2.target_entity_id
+                GROUP BY entity_id, name, category
+            """
+            entities = conn.execute_query(entity_query)
+            
+            # Get all relationships
+            relationship_query = """
+                SELECT 
+                    r.source_entity_id,
+                    r.target_entity_id,
+                    r.relation_type,
+                    COUNT(*) as weight
+                FROM Relationships r
+                GROUP BY source_entity_id, target_entity_id, relation_type
+            """
+            relationships = conn.execute_query(relationship_query)
+            
+            # Create nodes
+            nodes = [
+                GraphNode(
+                    id=str(entity[0]),
+                    name=entity[1],
+                    category=entity[2],
+                    group=category_to_group.get(entity[2], 0),
+                    val=max(1, int(entity[3]))  # Node size based on connections
+                )
+                for entity in entities
+            ]
+            
+            # Create links
+            links = [
+                GraphLink(
+                    source=str(rel[0]),
+                    target=str(rel[1]),
+                    type=rel[2],
+                    value=int(rel[3])  # Link thickness based on relationship count
+                )
+                for rel in relationships
+            ]
+            
+            return GraphResponse(
+                data=GraphData(nodes=nodes, links=links),
+                execution_time=time.time() - start_time
+            )
+
+    except Exception as e:
+        logger.error(f"Error getting graph data: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving graph data: {str(e)}"
         )
