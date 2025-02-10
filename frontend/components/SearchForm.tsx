@@ -9,15 +9,15 @@ interface SearchResult {
   text_score: number;
   combined_score: number;
   entities: Array<{
-    id: number;
+    entity_id: number;
     name: string;
     category: string;
     description?: string;
   }>;
   relationships: Array<{
-    source_id: number;
-    target_id: number;
-    relationship_type: string;
+    source_entity_id: number;
+    target_entity_id: number;
+    relation_type: string;
     metadata?: Record<string, any>;
   }>;
 }
@@ -120,15 +120,30 @@ export default function SearchForm() {
                 >
                   {/* Relevance Scores */}
                   <div className="flex flex-wrap gap-4 mb-4">
-                    <div className="px-3 py-1.5 bg-blue-50 rounded-full text-sm text-blue-700 font-medium">
-                      Vector Score: {result.vector_score.toFixed(3)}
-                    </div>
-                    <div className="px-3 py-1.5 bg-green-50 rounded-full text-sm text-green-700 font-medium">
-                      Text Score: {result.text_score.toFixed(3)}
-                    </div>
-                    <div className="px-3 py-1.5 bg-purple-50 rounded-full text-sm text-purple-700 font-medium">
-                      Combined Score: {result.combined_score.toFixed(3)}
-                    </div>
+                    {[
+                      {
+                        label: 'Vector Score',
+                        value: result.vector_score,
+                        className: 'bg-blue-50 text-blue-700'
+                      },
+                      {
+                        label: 'Text Score',
+                        value: result.text_score,
+                        className: 'bg-green-50 text-green-700'
+                      },
+                      {
+                        label: 'Combined Score',
+                        value: result.combined_score,
+                        className: 'bg-purple-50 text-purple-700'
+                      }
+                    ].map((score, idx) => (
+                      <div
+                        key={`${result.doc_id}-score-${idx}`}
+                        className={`px-3 py-1.5 rounded-full text-sm font-medium ${score.className}`}
+                      >
+                        {score.label}: {score.value.toFixed(3)}
+                      </div>
+                    ))}
                   </div>
 
                   {/* Content */}
@@ -139,9 +154,13 @@ export default function SearchForm() {
                     <p className="text-gray-800 leading-relaxed whitespace-pre-line">
                       {result.content
                         .split('. ')
-                        .map(sentence => sentence.trim())
+                        .map((sentence, idx) => sentence.trim())
                         .filter(sentence => sentence.length > 0)
-                        .join('.\n\n')}
+                        .map((sentence, idx) => (
+                          <span key={`${result.doc_id}-sentence-${idx}`}>
+                            {sentence}.{'\n\n'}
+                          </span>
+                        ))}
                     </p>
                   </div>
 
@@ -154,7 +173,7 @@ export default function SearchForm() {
                       <div className="flex flex-wrap gap-2">
                         {result.entities.map((entity) => (
                           <div
-                            key={entity.id}
+                            key={`${result.doc_id}-entity-${entity.entity_id}`}
                             className="px-3 py-1.5 bg-gray-50 rounded-full text-sm text-gray-700 flex items-center gap-1.5 border border-gray-200"
                           >
                             <span className="font-medium">{entity.name}</span>

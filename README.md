@@ -215,3 +215,155 @@ Contributions are welcome! Please read our contributing guidelines before submit
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Setup, Run Instructions, and Testing Details
+
+### Setup
+
+1. **Clone the Repository**
+   ```bash
+   git clone https://github.com/yourusername/singlestore-kag.git
+   cd singlestore-kag
+   ```
+
+2. **Backend Setup**
+   ```bash
+   # Create and activate virtual environment
+   python -m venv venv
+   source venv/bin/activate  # On Windows: .\venv\Scripts\activate
+
+   # Install dependencies
+   pip install -r requirements.txt
+
+   # Set up environment variables
+   cp .env.example .env
+   # Edit .env with your API keys and database credentials
+   ```
+
+3. **Frontend Setup**
+   ```bash
+   cd frontend
+   npm install
+   ```
+
+4. **Database Setup**
+   ```sql
+   -- Run these in your SingleStore console
+   CREATE DATABASE knowledge_graph;
+   USE knowledge_graph;
+
+   -- Create tables (see schema.sql for full schema)
+   CREATE TABLE Documents (...);
+   CREATE TABLE Document_Embeddings (...);
+   CREATE TABLE Entities (...);
+   CREATE TABLE Relationships (...);
+   ```
+
+### Running the Application
+
+1. **Start the Backend**
+   ```bash
+   # From project root
+   uvicorn api:app --reload
+   ```
+   Backend will run on http://localhost:8000
+
+2. **Start the Frontend**
+   ```bash
+   # From frontend directory
+   npm run dev
+   ```
+   Frontend will run on http://localhost:3000
+
+### Testing End-to-End Retrieval
+
+1. **Via Web Interface**
+   - Open http://localhost:3000 in your browser
+   - Enter a search query
+   - View results with:
+     - Document matches
+     - Relevance scores
+     - Entity highlights
+     - AI-generated response
+
+2. **Via API**
+   ```bash
+   # Example cURL request
+   curl -X POST http://localhost:8000/kag-search \
+     -H "Content-Type: application/json" \
+     -d '{
+       "query": "how do you use ai with singlestore",
+       "top_k": 5,
+       "debug": false
+     }'
+   ```
+
+3. **Sample Queries**
+   - "How does SingleStore handle vector search?"
+   - "What are the key features of SingleStore's AI capabilities?"
+   - "Explain SingleStore's integration with OpenAI"
+
+## Project Structure
+
+```
+singlestore-kag/
+├── api.py              # FastAPI endpoints
+├── rag_query.py        # RAG implementation
+├── models.py           # Shared Pydantic models
+├── db.py              # Database connection
+├── docs/              # Documentation
+├── frontend/          # Next.js frontend
+└── requirements.txt   # Python dependencies
+```
+
+## Environment Variables
+
+Required environment variables in `.env`:
+
+```env
+OPENAI_API_KEY=your_openai_key
+GEMINI_API_KEY=your_gemini_key
+SINGLESTORE_HOST=your_db_host
+SINGLESTORE_PORT=your_db_port
+SINGLESTORE_USER=your_db_user
+SINGLESTORE_PASSWORD=your_db_password
+SINGLESTORE_DATABASE=your_db_name
+```
+
+## Development
+
+- Backend uses FastAPI with Pydantic models
+- Frontend uses Next.js 14 with TypeScript
+- Database uses SingleStore with HNSW vector index
+- API documentation available at http://localhost:8000/docs
+
+## Troubleshooting
+
+Common issues and solutions:
+
+1. **Connection Errors**
+   - Verify database credentials in `.env`
+   - Ensure SingleStore is running
+   - Check CORS settings if frontend can't connect
+
+2. **Search Issues**
+   - Verify document embeddings exist
+   - Check vector dimensions match (1536)
+   - Ensure full-text index is enabled
+
+3. **Entity Issues**
+   - Verify entity extraction is working
+   - Check entity IDs are consistent
+   - Validate relationship mappings
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
