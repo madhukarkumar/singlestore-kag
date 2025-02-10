@@ -67,7 +67,7 @@ export default function SearchForm() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-4">
+    <div className="max-w-4xl mx-auto">
       <form onSubmit={handleSubmit} className="mb-8">
         <div className="flex gap-2">
           <input
@@ -75,13 +75,13 @@ export default function SearchForm() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Enter your search query..."
-            className="flex-1 p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
             required
           />
           <button
             type="submit"
             disabled={isLoading}
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-blue-300"
+            className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-blue-300 text-lg font-medium transition-colors"
           >
             {isLoading ? 'Searching...' : 'Search'}
           </button>
@@ -89,43 +89,79 @@ export default function SearchForm() {
       </form>
 
       {error && (
-        <div className="p-4 mb-4 text-red-700 bg-red-100 rounded-lg">
-          {error}
+        <div className="p-4 mb-6 text-red-700 bg-red-100 rounded-lg border border-red-200">
+          <p className="font-medium">Error</p>
+          <p>{error}</p>
         </div>
       )}
 
       {response && (
-        <div className="space-y-6">
+        <div className="space-y-8">
+          {/* AI Generated Response */}
           {response.generated_response && (
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <h3 className="font-semibold mb-2">Generated Response:</h3>
-              <p>{response.generated_response}</p>
+            <div className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
+              <h3 className="text-lg font-semibold mb-3 text-blue-900">AI Response</h3>
+              <p className="text-gray-800 leading-relaxed whitespace-pre-line">
+                {response.generated_response.split('. ').join('.\n\n')}
+              </p>
             </div>
           )}
 
-          <div>
-            <h3 className="font-semibold mb-2">Search Results:</h3>
-            <div className="space-y-4">
-              {response.results.map((result) => (
-                <div key={result.doc_id} className="p-4 border border-gray-200 rounded-lg">
-                  <div className="mb-2">
-                    <p className="text-sm text-gray-600">
-                      Scores: Vector {result.vector_score.toFixed(3)}, Text{' '}
-                      {result.text_score.toFixed(3)}, Combined{' '}
-                      {result.combined_score.toFixed(3)}
+          {/* Search Results */}
+          <div className="space-y-6">
+            <h3 className="text-xl font-semibold text-gray-900 border-b pb-2">
+              Search Results
+            </h3>
+            <div className="space-y-8">
+              {response.results.map((result, index) => (
+                <div
+                  key={`${result.doc_id}-${index}`}
+                  className="p-6 bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow divide-y divide-gray-100"
+                >
+                  {/* Relevance Scores */}
+                  <div className="flex flex-wrap gap-4 mb-4">
+                    <div className="px-3 py-1.5 bg-blue-50 rounded-full text-sm text-blue-700 font-medium">
+                      Vector Score: {result.vector_score.toFixed(3)}
+                    </div>
+                    <div className="px-3 py-1.5 bg-green-50 rounded-full text-sm text-green-700 font-medium">
+                      Text Score: {result.text_score.toFixed(3)}
+                    </div>
+                    <div className="px-3 py-1.5 bg-purple-50 rounded-full text-sm text-purple-700 font-medium">
+                      Combined Score: {result.combined_score.toFixed(3)}
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="py-4">
+                    <h4 className="text-sm font-semibold text-gray-700 mb-3">
+                      Document Content
+                    </h4>
+                    <p className="text-gray-800 leading-relaxed whitespace-pre-line">
+                      {result.content
+                        .split('. ')
+                        .map(sentence => sentence.trim())
+                        .filter(sentence => sentence.length > 0)
+                        .join('.\n\n')}
                     </p>
                   </div>
-                  <p className="mb-4">{result.content}</p>
+
+                  {/* Entities */}
                   {result.entities.length > 0 && (
-                    <div className="text-sm">
-                      <p className="font-medium">Entities:</p>
-                      <ul className="list-disc list-inside">
+                    <div className="pt-4" key={`entities-${result.doc_id}`}>
+                      <h4 className="text-sm font-semibold text-gray-700 mb-3">
+                        Entities Found
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
                         {result.entities.map((entity) => (
-                          <li key={entity.id}>
-                            {entity.name} ({entity.category})
-                          </li>
+                          <div
+                            key={entity.id}
+                            className="px-3 py-1.5 bg-gray-50 rounded-full text-sm text-gray-700 flex items-center gap-1.5 border border-gray-200"
+                          >
+                            <span className="font-medium">{entity.name}</span>
+                            <span className="text-gray-500 text-xs">({entity.category})</span>
+                          </div>
                         ))}
-                      </ul>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -133,9 +169,10 @@ export default function SearchForm() {
             </div>
           </div>
 
-          <p className="text-sm text-gray-600">
+          {/* Execution Time */}
+          <div className="text-sm text-gray-500 text-right">
             Query executed in {response.execution_time.toFixed(3)} seconds
-          </p>
+          </div>
         </div>
       )}
     </div>

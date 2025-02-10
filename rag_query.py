@@ -17,6 +17,7 @@ import openai
 from dotenv import load_dotenv
 from db import DatabaseConnection
 import re
+from models import Entity, Relationship, SearchResult, SearchResponse
 
 # Configure logging
 logging.basicConfig(
@@ -50,7 +51,7 @@ class RAGQueryEngine:
         self.debug_dir = "debug_output"
         if debug_output:
             os.makedirs(self.debug_dir, exist_ok=True)
-            
+
     def get_query_embedding(self, query: str) -> List[float]:
         """Get embedding for the query text."""
         try:
@@ -171,7 +172,7 @@ class RAGQueryEngine:
         
         return sorted(doc_scores.values(), key=lambda d: d["combined_score"], reverse=True)
 
-    def get_entities_for_content(self, db: DatabaseConnection, content: str) -> List[Dict]:
+    def get_entities_for_content(self, db: DatabaseConnection, content: str) -> List[Entity]:
         """Find entities mentioned in the content."""
         try:
             # Extract potential entity names using simple word-based approach
@@ -179,129 +180,139 @@ class RAGQueryEngine:
             words = re.sub(r'[^\w\s]', ' ', content).split()
             # Get unique words, filter out common words and very short terms
             unique_terms = set(word.lower() for word in words if len(word) > 2)
-            # Convert to a SQL-safe list format
-            search_terms = ' '.join(unique_terms)
             
-            # Limit the search terms to prevent overwhelming the query
-            if len(search_terms) > 1000:  # Reasonable limit for search terms
-                search_terms = search_terms[:1000]
+            # Format terms for SQL query
+            terms_str = ', '.join(f"'{term}'" for term in unique_terms)
             
-            # Format query with name prefix and proper wrapping
-            formatted_query = f'name:("{search_terms}")'
-            logger.info(f"Entities table -> Formatted full-text search query: {formatted_query}")
+            if not terms_str:
+                return []
             
-            query = """
+            # Query using schema-defined columns
+            sql = """
                 SELECT DISTINCT
                     entity_id,
                     name,
                     category,
-                    description
+                    COALESCE(description, '') as description,
+                    COALESCE(aliases, '[]') as aliases
                 FROM Entities
-                WHERE MATCH(TABLE Entities) AGAINST(%s)
-                   OR LOWER(name) LIKE CONCAT('%%', LOWER(%s), '%%')
+                WHERE LOWER(name) IN (%s)
                 LIMIT 10;
-            """
-            # Log the SQL with actual parameter values for debugging
-            debug_sql = query.replace("%s", f"'{formatted_query}'")  # Replace first param
-            debug_sql = debug_sql.replace("%s", f"'{search_terms}'")  # Replace second param
-            logger.info(f"Executing entity search SQL: {debug_sql}")
-            logger.info(f"With search terms: {formatted_query}")
+            """ % terms_str
             
-            # For LIKE clause, use original search terms without prefix
-            results = db.execute_query(query, (formatted_query, search_terms))
-            return [
-                {
-                    "id": r[0],
-                    "name": r[1],
-                    "type": r[2],
-                    "description": r[3]
-                }
-                for r in results
-            ]
+            logger.debug(f"Executing entity search SQL: {sql}")
+            results = db.execute_query(sql)
+            
+            entities = []
+            for r in results:
+                try:
+                    # Parse the JSON string into a Python list
+                    aliases = json.loads(r[4]) if r[4] else []
+                    
+                    entity = Entity(
+                        entity_id=r[0],  # Use entity_id to match the Field alias
+                        name=r[1],
+                        category=r[2],
+                        description=r[3],
+                        aliases=aliases
+                    )
+                    entities.append(entity)
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Failed to parse aliases JSON for entity {r[0]}: {e}")
+                    # Continue with empty aliases if JSON parsing fails
+                    entity = Entity(
+                        entity_id=r[0],  # Use entity_id to match the Field alias
+                        name=r[1],
+                        category=r[2],
+                        description=r[3],
+                        aliases=[]
+                    )
+                    entities.append(entity)
+            
+            return entities
+            
         except Exception as e:
-            logger.error(f"Error finding entities: {str(e)}")
+            logger.error(f"Error finding entities: {str(e)}", exc_info=True)
             return []
 
-    def get_relationships(self, db: DatabaseConnection, entity_ids: List[int]) -> List[Dict]:
+    def get_relationships(self, db: DatabaseConnection, entity_ids: List[int]) -> List[Relationship]:
         """Get relationships for the given entities."""
         try:
             if not entity_ids:
                 return []
-                
-            placeholders = ','.join(['%s'] * len(entity_ids))
-            query = f"""
-                SELECT DISTINCT
-                    r.relationship_id,
-                    r.source_entity_id,
-                    se.name as source_name,
-                    r.target_entity_id,
-                    te.name as target_name,
-                    r.relation_type
-                FROM Relationships r
-                JOIN Entities se ON r.source_entity_id = se.entity_id
-                JOIN Entities te ON r.target_entity_id = te.entity_id
-                WHERE r.source_entity_id IN ({placeholders})
-                   OR r.target_entity_id IN ({placeholders})
-                LIMIT 50;
-            """
-            # Log the SQL with actual parameter values for debugging
-            debug_sql = query.replace(placeholders, str(entity_ids))
-            logger.info(f"Executing relationship search SQL: {debug_sql}")
-            logger.info(f"With entity IDs: {entity_ids}")
             
-            # Need to pass entity_ids twice since we use the list in both IN clauses
-            results = db.execute_query(query, entity_ids + entity_ids)
+            # Format entity IDs for SQL
+            ids_str = ', '.join(str(id) for id in entity_ids)
+            
+            # Query using schema-defined columns
+            sql = """
+                SELECT DISTINCT
+                    source_entity_id,
+                    target_entity_id,
+                    relation_type,
+                    doc_id
+                FROM Relationships
+                WHERE source_entity_id IN (%s)
+                OR target_entity_id IN (%s)
+                LIMIT 20;
+            """ % (ids_str, ids_str)
+            
+            results = db.execute_query(sql)
+            
             return [
-                {
-                    "id": r[0],
-                    "source_id": r[1],
-                    "source_name": r[2],
-                    "target_id": r[3],
-                    "target_name": r[4],
-                    "relation_type": r[5]
-                }
+                Relationship(
+                    source_entity_id=r[0],
+                    target_entity_id=r[1],
+                    relation_type=r[2],
+                    metadata={"doc_id": r[3]} if r[3] else {}
+                )
                 for r in results
             ]
+            
         except Exception as e:
-            logger.error(f"Error finding relationships: {str(e)}")
+            logger.error(f"Error getting relationships: {str(e)}", exc_info=True)
             return []
 
     def generate_response(self, query: str, context: Dict) -> str:
         """Generate natural language response using OpenAI."""
         try:
-            # Load and format the prompt template
-            with open('rag_prompt.md', 'r') as f:
-                prompt_template = f.read()
-            
-            # Build document section
-            doc_lines = []
-            for doc in context.get("documents", []):
-                content = doc["content"].strip().replace("\n", " ")
-                doc_lines.append(f'Document: "{content}"')
-            doc_section = "\n".join(doc_lines)
-            
-            # Build entity section
-            entity_lines = []
-            for entity in context.get("entities", []):
-                entity_lines.append(
-                    f"- {entity['name']} ({entity.get('category', 'Unknown')}): {entity.get('description', '')}"
-                )
-            entity_section = "\n".join(entity_lines)
-            
-            # Build relationship section
-            rel_lines = []
-            for rel in context.get("relationships", []):
-                rel_lines.append(
-                    f"- {rel.get('source_name', '')} —({rel.get('relation_type', '')})→ {rel.get('target_name', '')}"
-                )
-            rel_section = "\n".join(rel_lines)
-            
-            # Format the complete prompt
-            prompt = prompt_template.format(
-                documents=doc_section,
-                entities=entity_section,
-                relationships=rel_section,
-                query=query
+            # Format context sections
+            doc_section = "\n\n".join([
+                f"Document {i+1}:\n"
+                f"Content: {result.content}\n"
+                f"Relevance Score: {result.combined_score:.3f}"
+                for i, result in enumerate(context["results"])
+            ])
+
+            # Create a list of unique entities (using Entity's __hash__ and __eq__)
+            all_entities = list({entity for result in context["results"] for entity in result.entities})
+
+            entity_section = "\n".join([
+                f"- {entity.name} (Type: {entity.category})"
+                for entity in all_entities
+            ])
+
+            # Create a list of unique relationships
+            all_relationships = list({
+                (rel.source_entity_id, rel.target_entity_id, rel.relation_type)
+                for result in context["results"]
+                for rel in result.relationships
+            })
+
+            rel_section = "\n".join([
+                f"- {rel_type}: Entity {src_id} -> Entity {tgt_id}"
+                for src_id, tgt_id, rel_type in all_relationships
+            ])
+
+            # Build the prompt
+            prompt = self._build_prompt(
+                query=query,
+                context={
+                    "documents": doc_section,
+                    "entities": entity_section,
+                    "relationships": rel_section,
+                    "query": query
+                }
             )
             
             if self.debug_output:
@@ -313,18 +324,24 @@ class RAGQueryEngine:
                 messages=[
                     {
                         "role": "system", 
-                        "content": "You are a knowledgeable assistant that provides accurate answers based on the given context. Make connections between entities and their relationships to provide comprehensive answers."
+                        "content": """You are a knowledgeable assistant that provides accurate answers based on the given context. 
+                        Follow these rules:
+                        1. Only use information from the provided documents to answer the query
+                        2. If the documents don't contain relevant information, say so
+                        3. Make connections between entities and their relationships when relevant
+                        4. Format your response with proper paragraphs and line breaks
+                        5. Be concise but thorough"""
                     },
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0
+                temperature=0.3
             )
             
             return response.choices[0].message.content
             
         except Exception as e:
-            logger.error(f"Error generating response: {str(e)}")
-            return f"Error generating response: {str(e)}"
+            logger.error(f"Error generating response: {str(e)}", exc_info=True)
+            return f"I apologize, but I encountered an error while generating the response. Please try rephrasing your query or contact support if the issue persists."
 
     def _build_prompt(self, query: str, context: Dict) -> str:
         """Build prompt for the LLM using retrieved context."""
@@ -336,7 +353,7 @@ class RAGQueryEngine:
                 documents=context["documents"],
                 entities=context["entities"],
                 relationships=context["relationships"],
-                query=query
+                query=context["query"]
             )
         except Exception as e:
             logger.error(f"Error building prompt: {str(e)}")
@@ -359,7 +376,7 @@ class RAGQueryEngine:
         except Exception as e:
             logger.warning(f"Failed to save debug output: {str(e)}")
 
-    def query(self, query_text: str, top_k: int = 5) -> str:
+    def query(self, query_text: str, top_k: int = 5) -> SearchResponse:
         """Execute a hybrid search query combining vector and text search."""
         try:
             with DatabaseConnection() as db:
@@ -382,65 +399,40 @@ class RAGQueryEngine:
                         "merged_results": merged_results
                     })
                 
-                # Extract entities and relationships
-                context = {
-                    "documents": [
-                        {
-                            "doc_id": doc["doc_id"],
-                            "content": doc["content"],
-                            "score": doc["combined_score"]
-                        }
-                        for doc in merged_results
-                    ],
-                    "entities": [],
-                    "relationships": []
-                }
-                
-                all_entities = []
+                # Build context with SearchResult objects
+                formatted_results = []
                 for doc in merged_results:
+                    # Get entities for this content
                     entities = self.get_entities_for_content(db, doc["content"])
-                    all_entities.extend(entities)
+                    
+                    # Get relationships for these entities
+                    relationships = self.get_relationships(db, [e.id for e in entities])
+                    
+                    # Create SearchResult object
+                    search_result = SearchResult(
+                        doc_id=doc["doc_id"],
+                        content=doc["content"],
+                        vector_score=doc.get("vector_score", 0.0),
+                        text_score=doc.get("text_score", 0.0),
+                        combined_score=doc["combined_score"],
+                        entities=entities,
+                        relationships=relationships
+                    )
+                    formatted_results.append(search_result)
                 
-                # Remove duplicates
-                unique_entities = {e["id"]: e for e in all_entities}.values()
-                context["entities"] = list(unique_entities)
-                
-                entity_ids = [e["id"] for e in unique_entities]
-                relationships = self.get_relationships(db, entity_ids)
-                context["relationships"] = relationships
+                # Create SearchResponse
+                response = SearchResponse(
+                    query=query_text,
+                    results=formatted_results,
+                    generated_response=self.generate_response(query_text, {"results": formatted_results}),
+                    execution_time=0.0  # We'll set this in the API layer
+                )
                 
                 if self.debug_output:
-                    self.save_debug_output("query_context", context)
+                    self.save_debug_output("query_context", response.dict())
                 
-                # Generate response
-                return self.generate_response(query_text, context)
+                return response
                 
         except Exception as e:
-            logger.error(f"Error processing query: {str(e)}")
-            raise
-
-def main():
-    """Command line interface for RAG queries."""
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="Query the knowledge base using RAG")
-    parser.add_argument("query", help="Natural language query to process")
-    parser.add_argument("--debug", action="store_true", help="Enable debug output")
-    parser.add_argument("--top_k", type=int, default=5, help="Number of top results to consider")
-    
-    args = parser.parse_args()
-    
-    try:
-        engine = RAGQueryEngine(debug_output=args.debug)
-        response = engine.query(args.query, top_k=args.top_k)
-        print("\nResponse:")
-        print("-" * 80)
-        print(response)
-        print("-" * 80)
-        
-    except Exception as e:
-        logger.error(f"Query processing failed: {str(e)}")
-        raise
-
-if __name__ == "__main__":
-    main()
+            logger.error(f"Query execution error: {str(e)}", exc_info=True)
+            raise  # Let the API layer handle the error
