@@ -159,6 +159,39 @@ class KnowledgeGraphGenerator:
         except Exception as e:
             logger.warning(f"Failed to save debug output: {str(e)}")
     
+    def merge_entity_info(self, existing_entity: Dict, new_entity: Dict) -> Dict:
+        """
+        Merge information from multiple occurrences of the same entity.
+        
+        Args:
+            existing_entity: Currently stored entity information
+            new_entity: New entity information to merge
+            
+        Returns:
+            Dict containing merged entity information
+        """
+        # Use the longer description
+        merged_description = max(
+            [existing_entity["description"], new_entity["description"]], 
+            key=lambda x: len(x.strip())
+        )
+        
+        # Merge and deduplicate aliases
+        merged_aliases = list(set(
+            existing_entity.get("aliases", []) + 
+            new_entity.get("aliases", [])
+        ))
+        
+        # Keep original category unless it's empty
+        category = existing_entity["category"] if existing_entity["category"] else new_entity["category"]
+        
+        return {
+            "name": existing_entity["name"],
+            "description": merged_description,
+            "aliases": merged_aliases,
+            "category": category
+        }
+
     def store_knowledge(self, knowledge: Dict, db: DatabaseConnection) -> None:
         """
         Store extracted knowledge in SingleStore.
@@ -168,48 +201,115 @@ class KnowledgeGraphGenerator:
             db: Database connection instance
         """
         try:
-            # Store entities
-            for entity in knowledge["entities"]:
-                insert_entity_query = """
-                INSERT INTO Entities (name, description, aliases, category)
-                VALUES (%s, %s, %s, %s)
-                """
-                db.execute_query(
-                    insert_entity_query,
-                    (
-                        entity["name"],
-                        entity["description"],
-                        json.dumps(entity.get("aliases", [])),
-                        entity["category"]
-                    )
-                )
+            # Start transaction
+            db.execute_query("START TRANSACTION")
+            
+            try:
+                # Process and deduplicate entities first
+                unique_entities = {}
+                for entity in knowledge["entities"]:
+                    name = entity["name"]
+                    if name in unique_entities:
+                        # Merge with existing entity
+                        existing = unique_entities[name]
+                        merged = self.merge_entity_info(existing, entity)
+                        unique_entities[name] = merged
+                    else:
+                        unique_entities[name] = entity
                 
-            # Store relationships
-            for rel in knowledge["relationships"]:
-                insert_rel_query = """
-                INSERT INTO Relationships 
-                (source_entity_id, target_entity_id, relation_type, doc_id)
-                SELECT 
-                    s.entity_id, 
-                    t.entity_id, 
-                    %s,
-                    %s
-                FROM Entities s
-                JOIN Entities t
-                WHERE s.name = %s AND t.name = %s
-                """
-                db.execute_query(
-                    insert_rel_query,
-                    (
-                        rel["relation_type"],
-                        rel["doc_id"],
-                        rel["source"],
-                        rel["target"]
+                # Now store the unique entities
+                for entity in unique_entities.values():
+                    # Check if entity exists in database
+                    check_entity_query = """
+                    SELECT entity_id, name, description, aliases, category 
+                    FROM Entities 
+                    WHERE name = %s
+                    """
+                    existing = db.execute_query(check_entity_query, (entity["name"],))
+                    
+                    if existing:
+                        # Merge with existing database entity
+                        existing_entity = {
+                            "entity_id": existing[0][0],
+                            "name": existing[0][1],
+                            "description": existing[0][2],
+                            "aliases": existing[0][3] if isinstance(existing[0][3], list) else json.loads(existing[0][3]) if existing[0][3] else [],
+                            "category": existing[0][4]
+                        }
+                        merged = self.merge_entity_info(existing_entity, entity)
+                        
+                        # Update existing entity
+                        update_entity_query = """
+                        UPDATE Entities 
+                        SET description = %s,
+                            aliases = %s,
+                            category = %s
+                        WHERE entity_id = %s
+                        """
+                        db.execute_query(
+                            update_entity_query,
+                            (
+                                merged["description"],
+                                json.dumps(merged["aliases"]),
+                                merged["category"],
+                                existing_entity["entity_id"]
+                            )
+                        )
+                        logger.info(f"Updated existing entity: {merged['name']} (ID: {existing_entity['entity_id']})")
+                    else:
+                        # Insert new entity
+                        insert_entity_query = """
+                        INSERT INTO Entities (name, description, aliases, category)
+                        VALUES (%s, %s, %s, %s)
+                        """
+                        db.execute_query(
+                            insert_entity_query,
+                            (
+                                entity["name"],
+                                entity["description"],
+                                json.dumps(entity.get("aliases", [])),
+                                entity["category"]
+                            )
+                        )
+                        logger.info(f"Inserted new entity: {entity['name']}")
+                
+                # Store relationships
+                for rel in knowledge["relationships"]:
+                    insert_rel_query = """
+                    INSERT INTO Relationships 
+                    (source_entity_id, target_entity_id, relation_type, doc_id)
+                    SELECT DISTINCT
+                        s.entity_id, 
+                        t.entity_id, 
+                        %s,
+                        %s
+                    FROM Entities s
+                    JOIN Entities t
+                    WHERE s.name = %s AND t.name = %s
+                    """
+                    db.execute_query(
+                        insert_rel_query,
+                        (
+                            rel["relation_type"],
+                            rel.get("doc_id"),
+                            rel["source"],
+                            rel["target"]
+                        )
                     )
-                )
+                    logger.info(f"Stored relationship: {rel['source']} -> {rel['target']}")
+                
+                # Commit transaction
+                db.execute_query("COMMIT")
+                logger.info("Transaction committed successfully")
+                
+            except Exception as e:
+                # Rollback transaction on error
+                db.execute_query("ROLLBACK")
+                logger.error(f"Transaction rolled back due to error: {str(e)}")
+                raise
                 
         except Exception as e:
-            logger.error(f"Error storing knowledge in database: {str(e)}")
+            logger.error(f"Error storing knowledge: {str(e)}", exc_info=True)
             raise
     
     def process_document(self, doc_id: int) -> None:

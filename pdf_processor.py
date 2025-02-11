@@ -1,7 +1,7 @@
 import os
 import fitz  # PyMuPDF
 from datetime import datetime
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Dict, Any
 from pathlib import Path
 from db import DatabaseConnection
 from models import ProcessingStatus, ProcessingStatusResponse
@@ -11,6 +11,7 @@ from knowledge_graph import KnowledgeGraphGenerator
 from openai import OpenAI
 import google.generativeai as genai
 from google.generativeai.types import GenerateContentResponse
+import re
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -204,168 +205,287 @@ def get_semantic_chunks(text: str) -> List[str]:
         logger.warning("Falling back to basic chunking")
         return [text]
 
+def analyze_document_structure(doc: fitz.Document) -> Dict[str, Any]:
+    """
+    Analyze document structure to extract hierarchy and sections.
+    
+    Args:
+        doc: PyMuPDF document object
+        
+    Returns:
+        Dict containing document structure information
+    """
+    structure = {
+        "sections": [],
+        "hierarchy": {},
+        "toc": []
+    }
+    
+    # Extract table of contents if available
+    toc = doc.get_toc()
+    if toc:
+        structure["toc"] = toc
+        
+    current_section = None
+    current_level = 0
+    
+    for page_num in range(len(doc)):
+        page = doc[page_num]
+        blocks = page.get_text("dict")["blocks"]
+        
+        for block in blocks:
+            # Check for headings based on font size and style
+            if "lines" in block:
+                for line in block["lines"]:
+                    for span in line["spans"]:
+                        size = span["size"]
+                        text = span["text"].strip()
+                        
+                        # Identify potential headings
+                        if size > 12 and text:  # Adjust threshold as needed
+                            level = 1 if size > 16 else 2
+                            if current_level < level or current_section is None:
+                                section = {
+                                    "title": text,
+                                    "level": level,
+                                    "start_page": page_num,
+                                    "subsections": []
+                                }
+                                
+                                if level == 1:
+                                    structure["sections"].append(section)
+                                    current_section = section
+                                elif current_section is not None:
+                                    current_section["subsections"].append(section)
+                                
+                                current_level = level
+    
+    return structure
+
+def create_chunk_metadata(
+    doc_id: int,
+    position: int,
+    structure: Dict[str, Any],
+    content: str,
+    prev_chunk_id: Optional[int] = None,
+    next_chunk_id: Optional[int] = None,
+    overlap_start_id: Optional[int] = None,
+    overlap_end_id: Optional[int] = None
+) -> Dict[str, Any]:
+    """Create metadata for a chunk based on its position and document structure."""
+    
+    # Find the current section based on content
+    current_section = None
+    section_path = []
+    
+    for section in structure["sections"]:
+        if section["title"] in content:
+            current_section = section["title"]
+            section_path.append(section["title"])
+            for subsection in section["subsections"]:
+                if subsection["title"] in content:
+                    section_path.append(subsection["title"])
+                    break
+            break
+    
+    return {
+        "doc_id": doc_id,
+        "position": position,
+        "section_path": "/".join(section_path) if section_path else None,
+        "prev_chunk_id": prev_chunk_id,
+        "next_chunk_id": next_chunk_id,
+        "overlap_start_id": overlap_start_id,
+        "overlap_end_id": overlap_end_id,
+        "semantic_unit": detect_semantic_unit(content),
+        "structural_context": json.dumps(section_path)
+    }
+
+def detect_semantic_unit(content: str) -> str:
+    """Detect the semantic unit type of the content."""
+    # Simple heuristic-based detection
+    content_lower = content.lower()
+    
+    if any(marker in content_lower for marker in ["example:", "e.g.", "example "]):
+        return "example"
+    elif any(marker in content_lower for marker in ["definition:", "is defined as", "refers to"]):
+        return "definition"
+    elif any(marker in content_lower for marker in ["step ", "first", "second", "finally"]):
+        return "procedure"
+    elif "?" in content and len(content.split()) < 50:
+        return "question"
+    elif any(marker in content_lower for marker in ["note:", "important:", "warning:"]):
+        return "note"
+    else:
+        return "general"
+
+def process_chunks_with_overlap(
+    chunks: List[str],
+    doc_id: int,
+    structure: Dict[str, Any],
+    overlap_size: int = 200
+) -> List[Dict[str, Any]]:
+    """
+    Process chunks adding overlap and metadata.
+    
+    Args:
+        chunks: List of semantic chunks from Gemini
+        doc_id: Document ID
+        structure: Document structure information
+        overlap_size: Number of characters to overlap
+        
+    Returns:
+        List of enhanced chunks with metadata
+    """
+    enhanced_chunks = []
+    chunk_ids = {}  # Store chunk IDs for linking
+    
+    for i, chunk in enumerate(chunks):
+        # Create base chunk with content
+        enhanced_chunk = {
+            "content": chunk,
+            "position": i
+        }
+        
+        # Add overlap with previous chunk
+        if i > 0:
+            overlap_start = chunks[i-1][-overlap_size:]
+            enhanced_chunk["content"] = overlap_start + "\n" + chunk
+            enhanced_chunk["overlap_start_id"] = i-1
+        
+        # Add overlap with next chunk
+        if i < len(chunks) - 1:
+            overlap_end = chunks[i+1][:overlap_size]
+            enhanced_chunk["content"] = enhanced_chunk["content"] + "\n" + overlap_end
+            enhanced_chunk["overlap_end_id"] = i+1
+        
+        # Add metadata
+        enhanced_chunk["metadata"] = create_chunk_metadata(
+            doc_id=doc_id,
+            position=i,
+            structure=structure,
+            content=enhanced_chunk["content"],
+            prev_chunk_id=i-1 if i > 0 else None,
+            next_chunk_id=i+1 if i < len(chunks) - 1 else None,
+            overlap_start_id=enhanced_chunk.get("overlap_start_id"),
+            overlap_end_id=enhanced_chunk.get("overlap_end_id")
+        )
+        
+        enhanced_chunks.append(enhanced_chunk)
+    
+    return enhanced_chunks
+
 def process_pdf(doc_id: int, task=None):
     """Process PDF file through all steps"""
-    conn = DatabaseConnection()
-    client = OpenAI()
     try:
-        conn.connect()
-        logger.info(f"Starting PDF processing for doc_id: {doc_id}")
-        
-        # Get document info
-        query = "SELECT title, source FROM Documents WHERE doc_id = %s"
-        result = conn.execute_query(query, (doc_id,))
-        if not result:
-            raise ValueError(f"Document not found: {doc_id}")
+        conn = DatabaseConnection()
+        try:
+            conn.connect()
             
-        filename, file_path = result[0]
-        logger.info(f"Found document: {filename} at {file_path}")
-        
-        # Update status to chunking
-        update_processing_status(doc_id, "chunking")
-        if task:
-            task.update_state(state='PROCESSING', meta={
-                'status': 'Validating and chunking PDF...',
-                'current': 10,
-                'total': 100
-            })
-        
-        # Validate PDF
-        logger.info("Validating PDF...")
-        is_valid, error = validate_pdf(file_path)
-        if not is_valid:
-            logger.error(f"PDF validation failed: {error}")
-            raise PDFProcessingError(error)
+            # Get file path
+            query = "SELECT file_path FROM ProcessingStatus WHERE doc_id = %s"
+            result = conn.execute_query(query, (doc_id,))
+            if not result:
+                raise PDFProcessingError("Document not found")
             
-        # Extract text
-        logger.info("Starting text extraction...")
-        doc = fitz.open(file_path)
-        
-        # Process each page
-        total_pages = len(doc)
-        logger.info(f"Processing {total_pages} pages...")
-        
-        for page_num in range(total_pages):
-            logger.info(f"Processing page {page_num + 1}/{total_pages}")
-            page = doc[page_num]
-            text = page.get_text()
+            file_path = result[0][0]
+            logger.info(f"Processing PDF: {file_path}")
             
-            if text.strip():
-                # Get semantic chunks using Gemini
-                logger.info(f"Getting semantic chunks for page {page_num + 1}")
-                semantic_chunks = get_semantic_chunks(text)
+            # Open PDF
+            doc = fitz.open(file_path)
+            
+            # Update status to processing
+            update_processing_status(doc_id, "processing")
+            
+            # Extract text from PDF
+            text = ""
+            for page in doc:
+                text += page.get_text()
+            
+            # Analyze document structure
+            structure = analyze_document_structure(doc)
+            
+            # Get semantic chunks using Gemini
+            semantic_chunks = get_semantic_chunks(text)
+            
+            # Process chunks with overlap and metadata
+            enhanced_chunks = process_chunks_with_overlap(
+                chunks=semantic_chunks,
+                doc_id=doc_id,
+                structure=structure
+            )
+            
+            # Store chunks and metadata
+            for chunk in enhanced_chunks:
+                # Store chunk metadata
+                metadata_query = """
+                    INSERT INTO Chunk_Metadata 
+                    (doc_id, position, section_path, prev_chunk_id, 
+                     next_chunk_id, overlap_start_id, overlap_end_id, 
+                     semantic_unit, structural_context)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                metadata = chunk["metadata"]
+                conn.execute_query(
+                    metadata_query,
+                    (
+                        metadata["doc_id"],
+                        metadata["position"],
+                        metadata["section_path"],
+                        metadata["prev_chunk_id"],
+                        metadata["next_chunk_id"],
+                        metadata["overlap_start_id"],
+                        metadata["overlap_end_id"],
+                        metadata["semantic_unit"],
+                        metadata["structural_context"]
+                    )
+                )
+                chunk_metadata_id = conn.execute_query("SELECT LAST_INSERT_ID()")[0][0]
                 
-                for chunk in semantic_chunks:
-                    if not chunk.strip():
-                        continue
-                        
-                    try:
-                        logger.info(f"Generating embedding for chunk (size: {len(chunk)})")
-                        response = client.embeddings.create(
-                            input=chunk,
-                            model="text-embedding-ada-002"
-                        )
-                        embedding = response.data[0].embedding
-                        
-                        # Store text and embedding
-                        query = """
-                            INSERT INTO Document_Embeddings 
-                            (doc_id, content, embedding)
-                            VALUES (%s, %s, JSON_ARRAY_PACK(%s))
-                        """
-                        conn.execute_query(query, (doc_id, chunk, json.dumps(embedding)))
-                        logger.info(f"Stored chunk and embedding successfully")
-                    except Exception as e:
-                        logger.error(f"Error processing chunk: {str(e)}")
-                        raise PDFProcessingError(f"Failed to process chunk: {str(e)}")
-            
-            if task:
-                # Update progress (40% of total progress allocated to PDF processing)
-                progress = 10 + int((page_num + 1) / total_pages * 40)
-                task.update_state(state='PROCESSING', meta={
-                    'status': f'Processing page {page_num + 1} of {total_pages}',
-                    'current': progress,
-                    'total': 100
-                })
-        
-        doc.close()
-        logger.info("PDF processing completed successfully")
-        
-        # Generate knowledge graph
-        logger.info("Starting knowledge graph generation...")
-        update_processing_status(doc_id, "entities")
-        if task:
-            task.update_state(state='PROCESSING', meta={
-                'status': 'Generating knowledge graph...',
-                'current': 50,
-                'total': 100
-            })
-        
-        kg_generator = KnowledgeGraphGenerator()
-        
-        # Get all text chunks for this document
-        query = "SELECT embedding_id, content FROM Document_Embeddings WHERE doc_id = %s"
-        chunks = conn.execute_query(query, (doc_id,))
-        total_chunks = len(chunks)
-        
-        # Process chunks and generate knowledge graph
-        for chunk_num, (embedding_id, content) in enumerate(chunks, 1):
-            try:
-                logger.info(f"Extracting entities and relationships from chunk {embedding_id}...")
-                knowledge = kg_generator.extract_knowledge_sync(content, doc_id, embedding_id)
+                # Get embedding for chunk content
+                client = OpenAI()
+                response = client.embeddings.create(
+                    model="text-embedding-ada-002",
+                    input=chunk["content"]
+                )
+                embedding = response.data[0].embedding
                 
-                # Store entities
-                for entity in knowledge['entities']:
-                    query = """
-                        INSERT INTO Entities (name, description, aliases, category)
-                        VALUES (%s, %s, %s, %s)
-                    """
-                    conn.execute_query(query, (
-                        entity['name'],
-                        entity['description'],
-                        json.dumps(entity.get('aliases', [])),
-                        entity['category']
-                    ))
-                    logger.info(f"Stored entity: {entity['name']} ({entity['category']})")
-                
-                # Store relationships
-                for rel in knowledge['relationships']:
-                    query = """
-                        INSERT INTO Relationships (doc_id, source_entity_id, target_entity_id, relation_type)
-                        SELECT %s, e1.entity_id, e2.entity_id, %s
-                        FROM Entities e1, Entities e2
-                        WHERE e1.name = %s AND e2.name = %s
-                    """
-                    conn.execute_query(query, (
+                # Store chunk and embedding
+                query = """
+                    INSERT INTO Document_Embeddings 
+                    (doc_id, content, embedding, chunk_metadata_id)
+                    VALUES (%s, %s, JSON_ARRAY_PACK(%s), %s)
+                """
+                conn.execute_query(
+                    query,
+                    (
                         doc_id,
-                        rel['relation_type'],
-                        rel['source'],
-                        rel['target']
-                    ))
-                    logger.info(f"Stored relationship: {rel['source']} -{rel['relation_type']}-> {rel['target']}")
-                
-                logger.info(f"Successfully processed chunk {embedding_id}")
-                
-                if task:
-                    # Update progress (50% of total progress allocated to knowledge graph)
-                    progress = 50 + int((chunk_num / total_chunks) * 50)
-                    task.update_state(state='PROCESSING', meta={
-                        'status': f'Analyzing document content ({chunk_num}/{total_chunks})',
-                        'current': progress,
-                        'total': 100
-                    })
-                    
-            except Exception as e:
-                logger.error(f"Error processing chunk {embedding_id}: {str(e)}")
-                # Continue with next chunk even if one fails
-                continue
-        
-        # Update status to completed
-        update_processing_status(doc_id, "completed")
-        
+                        chunk["content"],
+                        json.dumps(embedding),
+                        chunk_metadata_id
+                    )
+                )
+            
+            # Extract and store knowledge graph
+            kg = KnowledgeGraphGenerator()
+            for i, chunk in enumerate(enhanced_chunks):
+                knowledge = kg.extract_knowledge_sync(
+                    text=chunk['content'],
+                    doc_id=doc_id,
+                    chunk_id=chunk['metadata']['position']  # Use position as chunk_id
+                )
+                kg.store_knowledge(knowledge, conn)
+            
+            # Update status to completed
+            update_processing_status(doc_id, "completed")
+            logger.info(f"Completed processing PDF: {file_path}")
+            
+        except Exception as e:
+            logger.error(f"Error processing PDF: {str(e)}", exc_info=True)
+            update_processing_status(doc_id, "failed", str(e))
+            raise
+        finally:
+            conn.disconnect()
+            
     except Exception as e:
-        logger.error(f"Error processing PDF: {str(e)}", exc_info=True)
-        update_processing_status(doc_id, "failed", str(e))
+        logger.error(f"Error in process_pdf: {str(e)}", exc_info=True)
         raise
-    finally:
-        conn.disconnect()

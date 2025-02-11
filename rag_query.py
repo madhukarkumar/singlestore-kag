@@ -81,10 +81,6 @@ class RAGQueryEngine:
                 ORDER BY score DESC
                 LIMIT %s;
             """
-            # Log the SQL with actual parameter values for debugging
-            debug_sql = vector_search_sql.replace("%s", str(limit))
-            logger.info(f"Executing vector search SQL: {debug_sql}")
-            logger.info(f"With parameters: limit={limit}")
             
             results = db.execute_query(vector_search_sql, (limit,))
             
@@ -99,11 +95,8 @@ class RAGQueryEngine:
     def text_search(self, db: DatabaseConnection, query: str, limit: int = 10) -> List[Dict]:
         """Perform full-text keyword search using Full-Text Search Version 2."""
         try:
-            # Format query with content prefix and proper wrapping
             formatted_query = f'content:("{query}")'
-            logger.info(f"Document_Embeddings table -> Formatted full-text search query: {formatted_query}")
             
-            # Use the content_ft_idx full-text index
             sql = """
                 SELECT 
                     doc_id,
@@ -114,13 +107,9 @@ class RAGQueryEngine:
                 ORDER BY score DESC
                 LIMIT %s;
             """
-            # Log the SQL with actual parameter values for debugging
-            debug_sql = sql.replace("%s", f"'{formatted_query}'", 2)  # Replace first two params
-            debug_sql = debug_sql.replace("%s", str(limit))  # Replace limit param
-            logger.info(f"Executing text search SQL: {debug_sql}")
-            logger.info(f"With parameters: query={formatted_query}, limit={limit}")
             
             results = db.execute_query(sql, (formatted_query, formatted_query, limit))
+            
             return [
                 {
                     "doc_id": r[0],
@@ -309,9 +298,7 @@ class RAGQueryEngine:
             prompt = self._build_prompt(
                 query=query,
                 context={
-                    "documents": doc_section,
-                    "entities": entity_section,
-                    "relationships": rel_section,
+                    "chunks": context["results"],
                     "query": query
                 }
             )
@@ -346,19 +333,34 @@ class RAGQueryEngine:
 
     def _build_prompt(self, query: str, context: Dict) -> str:
         """Build prompt for the LLM using retrieved context."""
-        try:
-            with open('rag_prompt.md', 'r') as f:
-                prompt_template = f.read()
-            
-            return prompt_template.format(
-                documents=context["documents"],
-                entities=context["entities"],
-                relationships=context["relationships"],
-                query=context["query"]
-            )
-        except Exception as e:
-            logger.error(f"Error building prompt: {str(e)}")
-            return ""
+        prompt = f"""Answer the following question based on the provided context. 
+Question: {query}
+
+Context:
+"""
+        # Convert chunks to dictionaries if they are Pydantic models
+        chunks = []
+        for chunk in context["chunks"]:
+            if hasattr(chunk, 'model_dump'):  # Pydantic v2 model
+                chunk_dict = chunk.model_dump()
+            elif hasattr(chunk, 'dict'):  # Pydantic v1 model
+                chunk_dict = chunk.dict()
+            else:
+                chunk_dict = chunk
+            chunks.append(chunk_dict)
+
+        # Add relevant chunks
+        for i, chunk in enumerate(chunks, 1):
+            prompt += f"\nChunk {i}:\n{chunk['content']}\n"
+
+        prompt += """
+Please provide a comprehensive answer that:
+1. Uses information from all relevant chunks
+2. Maintains proper context
+3. Cites specific information when appropriate
+
+Answer:"""
+        return prompt
 
     def save_debug_output(self, stage: str, data: Dict) -> None:
         """Save intermediate results for debugging."""
