@@ -35,6 +35,12 @@ A full-stack application that processes documents to create semantic embeddings 
 
 ## Version History
 
+### v1.2 (2025-02-11)
+- Improved semantic chunking with structured Gemini prompts
+- Enhanced document structure preservation
+- Better handling of feature lists and technical content
+- Improved search accuracy for technical queries
+
 ### v1.1 (2025-02-11)
 - Added reliable backend service management script
 - Fixed JSON parsing issue in entity aliases
@@ -198,6 +204,31 @@ The system uses five main tables in SingleStore:
    - Document processing status
    - Progress tracking
    - Error messages
+
+## Technical Details
+
+### Document Processing Pipeline
+
+The system uses a sophisticated document processing pipeline:
+
+1. **Semantic Chunking**
+   - Gemini AI-powered chunking with structure preservation
+   - Maintains document hierarchy and relationships
+   - Preserves section headers with content
+   - Special handling for feature lists and technical specifications
+
+2. **Search and Retrieval**
+   - Hybrid search combining vector and full-text matching
+   - Vector similarity using OpenAI embeddings
+   - TF-IDF based text search
+   - Entity and relationship enrichment
+   - Weighted scoring system
+
+3. **Response Generation**
+   - Context-aware prompt construction
+   - Entity relationship integration
+   - Structured output with citations
+   - Confidence scoring
 
 ## Usage
 

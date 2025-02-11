@@ -163,7 +163,13 @@ def get_semantic_chunks(text: str) -> List[str]:
     """Use Gemini to get semantic chunks from text."""
     try:
         prompt = f"""Split the following text into semantic chunks. Each chunk should be a coherent unit of information.
-        Keep related concepts together, especially for lists and feature descriptions.
+        Follow these rules strictly:
+        1. Always keep section headers with their immediate content
+        2. Keep feature lists and technical specifications together with their parent section
+        3. Maintain the relationship between titles/subtitles and their descriptions
+        4. For lists of features or capabilities, keep the entire list in one chunk
+        5. Keep related concepts together, especially for lists and feature descriptions
+
         Return only the chunks, one per line, with '---' as separator.
         
         Text to split:
