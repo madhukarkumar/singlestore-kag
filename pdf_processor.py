@@ -1,7 +1,7 @@
 import os
 import fitz  # PyMuPDF
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 from pathlib import Path
 from db import DatabaseConnection
 from models import ProcessingStatus, ProcessingStatusResponse
@@ -9,13 +9,21 @@ import logging
 import json
 from knowledge_graph import KnowledgeGraphGenerator
 from openai import OpenAI
-import time
+import google.generativeai as genai
+from google.generativeai.types import GenerateContentResponse
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
 DOCUMENTS_DIR = Path("documents")
 DOCUMENTS_DIR.mkdir(exist_ok=True)
+
+# Configure Gemini
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if not GEMINI_API_KEY:
+    raise ValueError("GEMINI_API_KEY environment variable is required")
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel('gemini-2.0-flash')
 
 class PDFProcessingError(Exception):
     pass
@@ -150,15 +158,56 @@ def cleanup_processing(doc_id: int):
     finally:
         conn.disconnect()
 
+def get_semantic_chunks(text: str) -> List[str]:
+    """Use Gemini to get semantic chunks from text."""
+    try:
+        prompt = f"""Split the following text into semantic chunks. Each chunk should be a coherent unit of information.
+        Keep related concepts together, especially for lists and feature descriptions.
+        Return only the chunks, one per line, with '---' as separator.
+        
+        Text to split:
+        {text}
+        """
+        
+        logger.info("Sending request to Gemini for semantic chunking")
+        logger.info(f"Input text length: {len(text)} characters")
+        logger.info(f"Input text preview: {text[:200]}...")
+        
+        response = model.generate_content(prompt)
+        logger.info("Received response from Gemini")
+        
+        if not response.text:
+            logger.warning("Gemini returned empty response, falling back to basic chunking")
+            return [text]
+            
+        logger.info(f"Raw Gemini response: {response.text}")
+            
+        # Split response into chunks
+        chunks = [chunk.strip() for chunk in response.text.split('---') if chunk.strip()]
+        
+        if not chunks:
+            logger.warning("No valid chunks found in Gemini response, falling back to basic chunking")
+            return [text]
+            
+        # Log each chunk
+        logger.info(f"Generated {len(chunks)} semantic chunks:")
+        for i, chunk in enumerate(chunks, 1):
+            logger.info(f"Chunk {i}/{len(chunks)}:")
+            logger.info(f"Length: {len(chunk)} characters")
+            logger.info(f"Content: {chunk}")
+            logger.info("-" * 80)
+            
+        return chunks
+        
+    except Exception as e:
+        logger.error(f"Error in semantic chunking: {str(e)}")
+        logger.warning("Falling back to basic chunking")
+        return [text]
+
 def process_pdf(doc_id: int, task=None):
-    """
-    Process PDF file through all steps
-    
-    Args:
-        doc_id: Document ID to process
-        task: Optional Celery task instance for progress updates
-    """
+    """Process PDF file through all steps"""
     conn = DatabaseConnection()
+    client = OpenAI()
     try:
         conn.connect()
         logger.info(f"Starting PDF processing for doc_id: {doc_id}")
@@ -171,15 +220,6 @@ def process_pdf(doc_id: int, task=None):
             
         filename, file_path = result[0]
         logger.info(f"Found document: {filename} at {file_path}")
-        
-        # Initialize OpenAI client for this task
-        logger.info("Initializing OpenAI client...")
-        try:
-            client = OpenAI()
-            logger.info("OpenAI client initialized successfully")
-        except Exception as e:
-            logger.error(f"Failed to initialize OpenAI client: {str(e)}")
-            raise PDFProcessingError(f"OpenAI client initialization failed: {str(e)}")
         
         # Update status to chunking
         update_processing_status(doc_id, "chunking")
@@ -210,43 +250,34 @@ def process_pdf(doc_id: int, task=None):
             page = doc[page_num]
             text = page.get_text()
             
-            # Store text chunks with embeddings
             if text.strip():
-                chunk_start_time = time.time()
-                logger.info(f"[Page {page_num + 1}] Starting chunk processing")
-                logger.info(f"[Page {page_num + 1}] Text length: {len(text)} characters")
+                # Get semantic chunks using Gemini
+                logger.info(f"Getting semantic chunks for page {page_num + 1}")
+                semantic_chunks = get_semantic_chunks(text)
                 
-                # Generate embedding using OpenAI
-                try:
-                    logger.info(f"[Page {page_num + 1}] Generating embedding...")
-                    embedding_start = time.time()
-                    response = client.embeddings.create(
-                        input=text,
-                        model="text-embedding-ada-002"
-                    )
-                    embedding = response.data[0].embedding
-                    embedding_time = time.time() - embedding_start
-                    logger.info(f"[Page {page_num + 1}] Embedding generated in {embedding_time:.2f}s")
-                    logger.info(f"[Page {page_num + 1}] Embedding dimension: {len(embedding)}")
-                    
-                    # Store text and embedding
-                    logger.info(f"[Page {page_num + 1}] Storing in database...")
-                    store_start = time.time()
-                    query = """
-                        INSERT INTO Document_Embeddings 
-                        (doc_id, content, embedding)
-                        VALUES (%s, %s, JSON_ARRAY_PACK(%s))
-                    """
-                    conn.execute_query(query, (doc_id, text, json.dumps(embedding)))
-                    store_time = time.time() - store_start
-                    logger.info(f"[Page {page_num + 1}] Stored in database in {store_time:.2f}s")
-                    
-                    total_chunk_time = time.time() - chunk_start_time
-                    logger.info(f"[Page {page_num + 1}] Total chunk processing time: {total_chunk_time:.2f}s")
-                    
-                except Exception as e:
-                    logger.error(f"[Page {page_num + 1}] Error processing chunk: {str(e)}", exc_info=True)
-                    raise PDFProcessingError(f"Failed to process page {page_num + 1}: {str(e)}")
+                for chunk in semantic_chunks:
+                    if not chunk.strip():
+                        continue
+                        
+                    try:
+                        logger.info(f"Generating embedding for chunk (size: {len(chunk)})")
+                        response = client.embeddings.create(
+                            input=chunk,
+                            model="text-embedding-ada-002"
+                        )
+                        embedding = response.data[0].embedding
+                        
+                        # Store text and embedding
+                        query = """
+                            INSERT INTO Document_Embeddings 
+                            (doc_id, content, embedding)
+                            VALUES (%s, %s, JSON_ARRAY_PACK(%s))
+                        """
+                        conn.execute_query(query, (doc_id, chunk, json.dumps(embedding)))
+                        logger.info(f"Stored chunk and embedding successfully")
+                    except Exception as e:
+                        logger.error(f"Error processing chunk: {str(e)}")
+                        raise PDFProcessingError(f"Failed to process chunk: {str(e)}")
             
             if task:
                 # Update progress (40% of total progress allocated to PDF processing)
