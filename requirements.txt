@@ -58,3 +58,5 @@ uvloop==0.21.0
 watchfiles==1.0.4
 websockets==14.2
 wheel==0.45.1
+celery==5.3.6
+redis==5.0.1

@@ -8,7 +8,7 @@ export default function UploadPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [docId, setDocId] = useState<number | null>(null);
+  const [taskId, setTaskId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const router = useRouter();
 
@@ -65,6 +65,7 @@ export default function UploadPage() {
 
   const handleUpload = async () => {
     if (!file) return;
+    if (uploading) return; // Prevent multiple uploads
 
     setUploading(true);
     setError(null);
@@ -79,26 +80,33 @@ export default function UploadPage() {
       });
 
       if (!response.ok) {
-        const error = await response.text();
-        throw new Error(error);
+        const errorText = await response.text();
+        throw new Error(errorText);
       }
 
       const data = await response.json();
-      setDocId(data.doc_id);
+      setTaskId(data.task_id);
+      setFile(null); // Clear the file after successful upload
     } catch (error) {
+      console.error('Upload error:', error);
       setError(error instanceof Error ? error.message : 'Failed to upload file');
+      setTaskId(null);
     } finally {
       setUploading(false);
     }
   };
 
   const handleProcessingComplete = useCallback(() => {
-    router.push('/kb');
+    // Show success state for 2 seconds before redirecting
+    setTimeout(() => {
+      router.push('/kb');
+    }, 2000);
   }, [router]);
 
-  const handleProcessingCancel = useCallback(() => {
-    setDocId(null);
+  const handleProcessingError = useCallback((errorMessage: string) => {
+    setTaskId(null);
     setFile(null);
+    setError(errorMessage);
   }, []);
 
   return (
@@ -106,7 +114,7 @@ export default function UploadPage() {
       <div className="max-w-2xl mx-auto">
         <h1 className="text-2xl font-bold mb-8">Upload PDF Document</h1>
 
-        {!docId && (
+        {!taskId && (
           <>
             <div
               className={`border-2 border-dashed rounded-lg p-8 text-center ${
@@ -178,11 +186,11 @@ export default function UploadPage() {
           </>
         )}
 
-        {docId && (
+        {taskId && (
           <ProcessingStatus
-            docId={docId}
+            taskId={taskId}
             onComplete={handleProcessingComplete}
-            onCancel={handleProcessingCancel}
+            onError={handleProcessingError}
           />
         )}
       </div>

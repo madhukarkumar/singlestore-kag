@@ -6,9 +6,11 @@ A full-stack application that processes documents to create semantic embeddings 
 
 - **Document Processing**
   - PDF and Markdown document processing
+  - Real-time progress tracking with detailed status updates
   - Semantic chunking using Google's Gemini AI
   - Vector embeddings using OpenAI's text-embedding-ada-002
   - Automatic knowledge graph generation
+  - Asynchronous processing with Celery
 
 - **Search Capabilities**
   - Hybrid search combining vector similarity and full-text search
@@ -19,6 +21,8 @@ A full-stack application that processes documents to create semantic embeddings 
 - **Modern Web Interface**
   - Clean and responsive Next.js frontend
   - Real-time search results
+  - Interactive progress tracking for document processing
+  - Visual feedback for processing stages
   - Detailed result display with scores and entities
   - Mobile-friendly design
 
@@ -38,6 +42,7 @@ A full-stack application that processes documents to create semantic embeddings 
 - SingleStore database
 - OpenAI API key
 - Google Gemini API key
+- Redis (for Celery task queue)
 
 ### Backend Setup
 
@@ -61,6 +66,7 @@ A full-stack application that processes documents to create semantic embeddings 
    SINGLESTORE_USER=your_user
    SINGLESTORE_PASSWORD=your_password
    SINGLESTORE_DATABASE=your_database
+   REDIS_URL=redis://localhost:6379/0
    ```
 
 3. **Database Setup**
@@ -69,8 +75,14 @@ A full-stack application that processes documents to create semantic embeddings 
    mysql -h <host> -u <user> -p <database> < schema.sql
    ```
 
-4. **Start Backend Server**
+4. **Start Backend Services**
    ```bash
+   # Start Redis (if not already running)
+   redis-server
+
+   # Start the Celery worker
+   celery -A tasks worker --loglevel=info
+   
    # Start the FastAPI server
    uvicorn api:app --reload
    
@@ -101,22 +113,29 @@ A full-stack application that processes documents to create semantic embeddings 
 
 ### Backend Components
 
-1. **Document Processing (`main.py`)**
-   - Handles PDF to markdown conversion
-   - Creates semantic chunks using Gemini AI
-   - Generates embeddings using OpenAI
+1. **Document Processing Pipeline**
+   - **PDF Processing (`pdf_processor.py`)**
+     - PDF validation and text extraction
+     - Progress tracking and status updates
+     - Database record management
+   
+   - **Task Queue (`tasks.py`)**
+     - Celery task definitions
+     - Asynchronous processing
+     - Progress reporting
+   
+   - **Knowledge Graph Generation (`knowledge_graph.py`)**
+     - Entity and relationship extraction
+     - Graph structure creation
+     - Relationship storage
 
-2. **Knowledge Graph Generation (`knowledge_graph.py`)**
-   - Extracts entities and relationships
-   - Creates graph structure
-   - Stores relationships in SingleStore
-
-3. **Search API (`api.py`)**
+2. **API Layer (`api.py`)**
    - FastAPI-based REST endpoints
-   - Hybrid search implementation
-   - Response generation using OpenAI
+   - Task status monitoring
+   - Search implementation
+   - Response generation
 
-4. **Database Layer (`db.py`)**
+3. **Database Layer (`db.py`)**
    - SingleStore connection management
    - Query execution and optimization
    - Vector and full-text search implementation
@@ -128,14 +147,20 @@ A full-stack application that processes documents to create semantic embeddings 
    - TypeScript for type safety
    - Tailwind CSS for styling
 
-2. **Search Interface**
+2. **Upload Interface**
+   - Drag-and-drop file upload
+   - Progress tracking
+   - Status visualization
+   - Error handling
+
+3. **Search Interface**
    - Real-time query handling
    - Result visualization
    - Error handling and loading states
 
 ### Database Schema
 
-The system uses four main tables in SingleStore:
+The system uses five main tables in SingleStore:
 
 1. **Document_Embeddings**
    - Document chunks and vector embeddings
@@ -155,19 +180,25 @@ The system uses four main tables in SingleStore:
    - Source document links
    - Hash indexes for quick lookups
 
+5. **ProcessingStatus**
+   - Document processing status
+   - Progress tracking
+   - Error messages
+
 ## Usage
 
 ### Document Processing
 
-1. **Add a New Document**
-   ```bash
-   python main.py path/to/document.pdf --document_id 1
-   ```
+1. **Upload a Document**
+   - Visit `http://localhost:3000/kb/upload`
+   - Drag and drop a PDF file or click to browse
+   - Monitor processing progress in real-time
+   - View status updates for each processing stage
 
-2. **Generate Knowledge Graph**
-   ```bash
-   python knowledge_graph.py --doc_id 1
-   ```
+2. **View Knowledge Base**
+   - After processing completes, you'll be redirected to the knowledge base
+   - View processed documents and their statistics
+   - Explore extracted entities and relationships
 
 ### Search Interface
 
@@ -191,6 +222,12 @@ Access the interactive API documentation at `http://localhost:8000/docs`
     - `top_k`: Number of results (default: 5)
     - `debug`: Enable debug mode (default: false)
 
+- `POST /upload-pdf`: Upload and process a PDF file
+  - Returns a task ID for tracking progress
+
+- `GET /task-status/{task_id}`: Get processing status
+  - Returns current status, progress, and any error messages
+
 - `GET /kbdata`: Retrieve knowledge base statistics
 
 ## Troubleshooting
@@ -199,56 +236,18 @@ Access the interactive API documentation at `http://localhost:8000/docs`
 
 1. **Connection Issues**
    - Verify SingleStore credentials in `.env`
-   - Check if database is accessible
-   - Confirm port settings
+   - Check Redis connection for task queue
+   - Ensure all services are running (Redis, Celery, FastAPI)
 
-2. **OpenAI Client Issues**
-   - If you see `TypeError: Client.__init__() got an unexpected keyword argument 'proxies'`:
-     1. Downgrade httpx to version 0.27.0: `pip install httpx==0.27.0`
-     2. This error occurs because httpx 0.28.0+ removed the `proxies` argument support
+2. **Processing Errors**
+   - Check Celery worker logs for detailed error messages
+   - Verify PDF file is not password protected
+   - Ensure file size is under 50MB
 
-   - For OpenAI client initialization:
-     1. Use `from openai import OpenAI` and initialize with `OpenAI()` for modern API
-     2. For embedding generation, use `client.embeddings.create()`
-     3. For chat completions, use `client.chat.completions.create()`
-     4. Let OpenAI client automatically use `OPENAI_API_KEY` from environment variables
-
-   Example of correct OpenAI client usage:
-   ```python
-   from openai import OpenAI
-   
-   # Modern initialization (preferred)
-   client = OpenAI()  # Will use OPENAI_API_KEY from env
-   
-   # For embeddings
-   response = client.embeddings.create(
-       input=text,
-       model="text-embedding-ada-002"
-   )
-   
-   # For chat completions
-   response = client.chat.completions.create(
-       model="gpt-4",
-       messages=[{"role": "user", "content": prompt}]
-   )
-   ```
-
-3. **Search Issues**
-   - Verify document embeddings exist
-   - Check vector dimensions match (1536)
-   - Ensure full-text index is enabled
-
-4. **API Issues**
-   - Check if backend server is running
-   - Verify API endpoints are accessible
-   - Review server logs for errors
-
-### Getting Help
-
-For additional help or to report issues:
-1. Check the documentation in `/docs`
-2. Review server logs
-3. Submit an issue with detailed error information
+3. **Performance Issues**
+   - Monitor Redis memory usage
+   - Check SingleStore query performance
+   - Verify system resources (CPU, memory)
 
 ## Contributing
 
@@ -283,6 +282,7 @@ SINGLESTORE_PORT=your_db_port
 SINGLESTORE_USER=your_db_user
 SINGLESTORE_PASSWORD=your_db_password
 SINGLESTORE_DATABASE=your_db_name
+REDIS_URL=redis://localhost:6379/0
 ```
 
 ## Development

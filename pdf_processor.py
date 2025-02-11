@@ -4,7 +4,13 @@ from datetime import datetime
 from typing import Optional, Tuple
 from pathlib import Path
 from db import DatabaseConnection
-from models import ProcessingStatus
+from models import ProcessingStatus, ProcessingStatusResponse
+import logging
+import json
+from knowledge_graph import KnowledgeGraphGenerator
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 DOCUMENTS_DIR = Path("documents")
 DOCUMENTS_DIR.mkdir(exist_ok=True)
@@ -48,125 +54,248 @@ def save_pdf(file_data: bytes, filename: str) -> str:
 
 def create_document_record(filename: str, file_path: str, file_size: int) -> int:
     """Create initial document record and return doc_id"""
-    with DatabaseConnection() as conn:
-        with conn.cursor() as cursor:
-            # Create document record
-            cursor.execute(
-                """
-                INSERT INTO Documents (title, source)
-                VALUES (%s, %s)
-                """,
-                (filename, file_path)
-            )
-            doc_id = cursor.lastrowid
-
-            # Create processing status record
-            cursor.execute(
-                """
-                INSERT INTO ProcessingStatus 
-                (doc_id, file_name, file_path, file_size, current_step)
-                VALUES (%s, %s, %s, %s, 'started')
-                """,
-                (doc_id, filename, file_path, file_size)
-            )
-            
-            return doc_id
+    conn = DatabaseConnection()
+    try:
+        conn.connect()
+        logger.info(f"Creating document record for {filename}")
+        
+        # Create document record
+        query = """
+            INSERT INTO Documents (title, source)
+            VALUES (%s, %s)
+        """
+        conn.execute_query(query, (filename, file_path))
+        logger.info("Document record created")
+        
+        # Get the last inserted ID
+        doc_id = conn.execute_query("SELECT LAST_INSERT_ID()")[0][0]
+        logger.info(f"Got document ID: {doc_id}")
+        
+        # Create processing status record
+        query = """
+            INSERT INTO ProcessingStatus 
+            (doc_id, file_name, file_path, file_size, current_step)
+            VALUES (%s, %s, %s, %s, 'started')
+        """
+        conn.execute_query(query, (doc_id, filename, file_path, file_size))
+        logger.info("Processing status record created")
+        
+        return doc_id
+    except Exception as e:
+        logger.error(f"Error creating document record: {str(e)}", exc_info=True)
+        raise
+    finally:
+        conn.disconnect()
 
 def update_processing_status(doc_id: int, step: str, error_message: Optional[str] = None):
     """Update processing status for a document"""
-    with DatabaseConnection() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute(
-                """
-                UPDATE ProcessingStatus
-                SET current_step = %s, error_message = %s
-                WHERE doc_id = %s
-                """,
-                (step, error_message, doc_id)
-            )
+    conn = DatabaseConnection()
+    try:
+        conn.connect()
+        query = """
+            UPDATE ProcessingStatus 
+            SET current_step = %s,
+                error_message = %s,
+                updated_at = NOW()
+            WHERE doc_id = %s
+        """
+        conn.execute_query(query, (step, error_message, doc_id))
+    finally:
+        conn.disconnect()
 
-def get_processing_status(doc_id: int) -> dict:
+def get_processing_status(doc_id: int) -> ProcessingStatusResponse:
     """Get current processing status"""
-    with DatabaseConnection() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT current_step, error_message, file_name
-                FROM ProcessingStatus
-                WHERE doc_id = %s
-                """,
-                (doc_id,)
-            )
-            result = cursor.fetchone()
-            if result:
-                return {
-                    "currentStep": result[0],
-                    "errorMessage": result[1],
-                    "fileName": result[2]
-                }
-            return None
+    conn = DatabaseConnection()
+    try:
+        conn.connect()
+        query = """
+            SELECT current_step, error_message, file_name, 
+                   TIMESTAMPDIFF(SECOND, last_updated, NOW()) as seconds_since_update
+            FROM ProcessingStatus
+            WHERE doc_id = %s
+        """
+        result = conn.execute_query(query, (doc_id,))
+        if not result:
+            raise ValueError(f"No processing status found for doc_id {doc_id}")
+            
+        current_step, error_message, file_name, seconds_since_update = result[0]
+        
+        # If the operation is taking too long (over 5 minutes), mark it as failed
+        if seconds_since_update > 300 and current_step not in ['completed', 'failed']:
+            error_message = "Operation timed out after 5 minutes"
+            update_processing_status(doc_id, 'failed', error_message)
+            current_step = 'failed'
+            
+        return ProcessingStatusResponse(
+            currentStep=current_step,
+            errorMessage=error_message,
+            fileName=file_name
+        )
+    finally:
+        conn.disconnect()
 
 def cleanup_processing(doc_id: int):
     """Clean up processing data for cancelled/failed jobs"""
-    with DatabaseConnection() as conn:
-        with conn.cursor() as cursor:
-            # Get file path
-            cursor.execute(
-                "SELECT file_path FROM ProcessingStatus WHERE doc_id = %s",
-                (doc_id,)
-            )
-            result = cursor.fetchone()
-            if result:
-                file_path = result[0]
-                
-                # Delete document and related data (cascading delete will handle other tables)
-                cursor.execute("DELETE FROM Documents WHERE doc_id = %s", (doc_id,))
-                
-                # Delete file if it exists
-                try:
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
-                except Exception as e:
-                    print(f"Error deleting file {file_path}: {e}")
+    conn = DatabaseConnection()
+    try:
+        conn.connect()
+        # Delete document record
+        conn.execute_query("DELETE FROM Documents WHERE doc_id = %s", (doc_id,))
+        # Delete processing status
+        conn.execute_query("DELETE FROM ProcessingStatus WHERE doc_id = %s", (doc_id,))
+        # Delete any chunks
+        conn.execute_query("DELETE FROM Document_Embeddings WHERE doc_id = %s", (doc_id,))
+    finally:
+        conn.disconnect()
 
-async def process_pdf(doc_id: int):
+def process_pdf(doc_id: int, task=None):
     """
     Process PDF file through all steps
+    
+    Args:
+        doc_id: Document ID to process
+        task: Optional Celery task instance for progress updates
     """
+    conn = DatabaseConnection()
     try:
-        # Get file path
-        with DatabaseConnection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute(
-                    "SELECT file_path FROM ProcessingStatus WHERE doc_id = %s",
-                    (doc_id,)
-                )
-                file_path = cursor.fetchone()[0]
-
+        conn.connect()
+        logger.info(f"Starting PDF processing for doc_id: {doc_id}")
+        
+        # Get document info
+        query = "SELECT title, source FROM Documents WHERE doc_id = %s"
+        result = conn.execute_query(query, (doc_id,))
+        if not result:
+            raise ValueError(f"Document not found: {doc_id}")
+            
+        filename, file_path = result[0]
+        logger.info(f"Found document: {filename} at {file_path}")
+        
+        # Update status to chunking
+        update_processing_status(doc_id, "chunking")
+        if task:
+            task.update_state(state='PROCESSING', meta={
+                'status': 'Validating and chunking PDF...',
+                'current': 10,
+                'total': 100
+            })
+        
         # Validate PDF
+        logger.info("Validating PDF...")
         is_valid, error = validate_pdf(file_path)
         if not is_valid:
+            logger.error(f"PDF validation failed: {error}")
             raise PDFProcessingError(error)
-
-        # Create semantic chunks
-        update_processing_status(doc_id, "chunking")
-        # TODO: Call existing chunking function
+            
+        # Extract text
+        logger.info("Starting text extraction...")
+        doc = fitz.open(file_path)
         
-        # Generate embeddings
-        update_processing_status(doc_id, "embeddings")
-        # TODO: Call existing embedding generation function
+        # Process each page
+        total_pages = len(doc)
+        logger.info(f"Processing {total_pages} pages...")
         
-        # Extract entities
+        for page_num in range(total_pages):
+            logger.info(f"Processing page {page_num + 1}/{total_pages}")
+            page = doc[page_num]
+            text = page.get_text()
+            
+            # Store text chunks with embeddings
+            if text.strip():
+                query = """
+                    INSERT INTO Document_Embeddings 
+                    (doc_id, content)
+                    VALUES (%s, %s)
+                """
+                conn.execute_query(query, (doc_id, text))
+                logger.info(f"Stored text chunk for page {page_num + 1}")
+            
+            if task:
+                # Update progress (40% of total progress allocated to PDF processing)
+                progress = 10 + int((page_num + 1) / total_pages * 40)
+                task.update_state(state='PROCESSING', meta={
+                    'status': f'Processing page {page_num + 1} of {total_pages}',
+                    'current': progress,
+                    'total': 100
+                })
+        
+        doc.close()
+        logger.info("PDF processing completed successfully")
+        
+        # Generate knowledge graph
+        logger.info("Starting knowledge graph generation...")
         update_processing_status(doc_id, "entities")
-        # TODO: Call existing entity extraction function
+        if task:
+            task.update_state(state='PROCESSING', meta={
+                'status': 'Generating knowledge graph...',
+                'current': 50,
+                'total': 100
+            })
         
-        # Extract relationships
-        update_processing_status(doc_id, "relationships")
-        # TODO: Call existing relationship extraction function
+        kg_generator = KnowledgeGraphGenerator()
         
-        # Mark as completed
+        # Get all text chunks for this document
+        query = "SELECT embedding_id, content FROM Document_Embeddings WHERE doc_id = %s"
+        chunks = conn.execute_query(query, (doc_id,))
+        total_chunks = len(chunks)
+        
+        # Process chunks and generate knowledge graph
+        for chunk_num, (embedding_id, content) in enumerate(chunks, 1):
+            try:
+                logger.info(f"Extracting entities and relationships from chunk {embedding_id}...")
+                knowledge = kg_generator.extract_knowledge_sync(content, doc_id, embedding_id)
+                
+                # Store entities
+                for entity in knowledge['entities']:
+                    query = """
+                        INSERT INTO Entities (name, description, aliases, category)
+                        VALUES (%s, %s, %s, %s)
+                    """
+                    conn.execute_query(query, (
+                        entity['name'],
+                        entity['description'],
+                        json.dumps(entity.get('aliases', [])),
+                        entity['category']
+                    ))
+                    logger.info(f"Stored entity: {entity['name']} ({entity['category']})")
+                
+                # Store relationships
+                for rel in knowledge['relationships']:
+                    query = """
+                        INSERT INTO Relationships (doc_id, source_entity_id, target_entity_id, relation_type)
+                        SELECT %s, e1.entity_id, e2.entity_id, %s
+                        FROM Entities e1, Entities e2
+                        WHERE e1.name = %s AND e2.name = %s
+                    """
+                    conn.execute_query(query, (
+                        doc_id,
+                        rel['relation_type'],
+                        rel['source'],
+                        rel['target']
+                    ))
+                    logger.info(f"Stored relationship: {rel['source']} -{rel['relation_type']}-> {rel['target']}")
+                
+                logger.info(f"Successfully processed chunk {embedding_id}")
+                
+                if task:
+                    # Update progress (50% of total progress allocated to knowledge graph)
+                    progress = 50 + int((chunk_num / total_chunks) * 50)
+                    task.update_state(state='PROCESSING', meta={
+                        'status': f'Analyzing document content ({chunk_num}/{total_chunks})',
+                        'current': progress,
+                        'total': 100
+                    })
+                    
+            except Exception as e:
+                logger.error(f"Error processing chunk {embedding_id}: {str(e)}")
+                # Continue with next chunk even if one fails
+                continue
+        
+        # Update status to completed
         update_processing_status(doc_id, "completed")
         
     except Exception as e:
+        logger.error(f"Error processing PDF: {str(e)}", exc_info=True)
         update_processing_status(doc_id, "failed", str(e))
         raise
+    finally:
+        conn.disconnect()
