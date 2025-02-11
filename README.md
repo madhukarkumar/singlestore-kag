@@ -33,6 +33,31 @@ A full-stack application that processes documents to create semantic embeddings 
   - Interactive knowledge graph visualization
   - Chunk distribution analysis
 
+## Version History
+
+### v1.2 (2025-02-11)
+- Improved semantic chunking with structured Gemini prompts
+- Enhanced document structure preservation
+- Better handling of feature lists and technical content
+- Improved search accuracy for technical queries
+
+### v1.1 (2025-02-11)
+- Added reliable backend service management script
+- Fixed JSON parsing issue in entity aliases
+- Improved Pydantic model handling in RAG query engine
+- Enhanced error handling and debugging capabilities
+- Added support for both Pydantic v1 and v2 models
+- Improved service startup sequence with proper cleanup
+
+### v1.0 (Initial Release)
+- PDF and Markdown document processing
+- Semantic chunking with Gemini AI
+- Vector embeddings with OpenAI
+- Hybrid search implementation
+- Knowledge graph generation
+- Real-time progress tracking
+- Modern Next.js frontend
+
 ## Installation and Setup
 
 ### Prerequisites
@@ -78,13 +103,10 @@ A full-stack application that processes documents to create semantic embeddings 
 4. **Start Backend Services**
    ```bash
    # Start Redis (if not already running)
-   redis-server
+   brew services start redis
 
-   # Start the Celery worker
-   celery -A tasks worker --loglevel=info
-   
-   # Start the FastAPI server
-   uvicorn api:app --reload
+   # Start all backend services
+   ./start_backend_services.sh
    
    # API will be available at http://localhost:8000
    # Swagger docs at http://localhost:8000/docs
@@ -103,9 +125,7 @@ A full-stack application that processes documents to create semantic embeddings 
 
 2. **Start Development Server**
    ```bash
-   # Start Next.js dev server
    pnpm dev
-   
    # Frontend will be available at http://localhost:3000
    ```
 
@@ -184,6 +204,31 @@ The system uses five main tables in SingleStore:
    - Document processing status
    - Progress tracking
    - Error messages
+
+## Technical Details
+
+### Document Processing Pipeline
+
+The system uses a sophisticated document processing pipeline:
+
+1. **Semantic Chunking**
+   - Gemini AI-powered chunking with structure preservation
+   - Maintains document hierarchy and relationships
+   - Preserves section headers with content
+   - Special handling for feature lists and technical specifications
+
+2. **Search and Retrieval**
+   - Hybrid search combining vector and full-text matching
+   - Vector similarity using OpenAI embeddings
+   - TF-IDF based text search
+   - Entity and relationship enrichment
+   - Weighted scoring system
+
+3. **Response Generation**
+   - Context-aware prompt construction
+   - Entity relationship integration
+   - Structured output with citations
+   - Confidence scoring
 
 ## Usage
 

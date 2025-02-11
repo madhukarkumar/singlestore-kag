@@ -3,14 +3,19 @@ CREATE TABLE Document_Embeddings (
   doc_id       BIGINT NOT NULL,
   content      TEXT,
   embedding    VECTOR(1536),
+  chunk_metadata_id BIGINT,
   SORT KEY(),  -- Ensure this is a columnstore table&#8203;:contentReference[oaicite:11]{index=11}
   FULLTEXT USING VERSION 2 content_ft_idx (content),  -- Full-Text index (v2) on content&#8203;:contentReference[oaicite:12]{index=12}
   VECTOR INDEX embedding_vec_idx (embedding)          -- Vector index on embedding column&#8203;:contentReference[oaicite:13]{index=13}
-    INDEX_OPTIONS '{ "index_type": "HNSW_FLAT", "metric_type": "DOT_PRODUCT" }'
+    INDEX_OPTIONS '{ "index_type": "HNSW_FLAT", "metric_type": "DOT_PRODUCT" }',
+  FOREIGN KEY (chunk_metadata_id) REFERENCES Chunk_Metadata(chunk_id)
 );
 
 ALTER TABLE Entities
   ADD FULLTEXT USING VERSION 2 ft_idx_name (name);
+
+ALTER TABLE Entities ADD UNIQUE INDEX idx_entity_name (name);
+
 
 CREATE TABLE Documents (
   doc_id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -38,12 +43,29 @@ CREATE TABLE Entities (
     description TEXT,
     aliases JSON,
     category VARCHAR(100),
-    -- Make the primary key composite to include the shard key columns:
     PRIMARY KEY (entity_id, name),
-    -- Shard key now includes the name column for local uniqueness enforcement:
     SHARD KEY (entity_id, name),
-    -- Add FULLTEXT index for name search
     FULLTEXT USING VERSION 2 name_ft_idx (name)
+);
+
+CREATE TABLE Chunk_Metadata (
+    chunk_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    doc_id BIGINT NOT NULL,
+    position INT NOT NULL,
+    section_path TEXT,
+    prev_chunk_id BIGINT,
+    next_chunk_id BIGINT,
+    overlap_start_id BIGINT,
+    overlap_end_id BIGINT,
+    semantic_unit VARCHAR(255),
+    structural_context JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (doc_id) REFERENCES Documents(doc_id),
+    FOREIGN KEY (prev_chunk_id) REFERENCES Chunk_Metadata(chunk_id),
+    FOREIGN KEY (next_chunk_id) REFERENCES Chunk_Metadata(chunk_id),
+    FOREIGN KEY (overlap_start_id) REFERENCES Chunk_Metadata(chunk_id),
+    FOREIGN KEY (overlap_end_id) REFERENCES Chunk_Metadata(chunk_id),
+    SHARD KEY (doc_id)
 );
 
 CREATE TABLE ProcessingStatus (
@@ -70,3 +92,38 @@ FROM Document_Embeddings
 WHERE MATCH (TABLE Document_Embeddings) AGAINST ('How does SingleStore support hybrid search in RAG?')
 ORDER BY score DESC
 LIMIT 10;
+
+
+
+----- Chunk related changes for better accuracy
+-- Create Chunk_Metadata table
+-- Create Chunk_Metadata table
+CREATE TABLE Chunk_Metadata (
+    chunk_id BIGINT NOT NULL AUTO_INCREMENT,
+    doc_id BIGINT NOT NULL,
+    position INT NOT NULL,
+    section_path TEXT,
+    prev_chunk_id BIGINT,
+    next_chunk_id BIGINT,
+    overlap_start_id BIGINT,
+    overlap_end_id BIGINT,
+    semantic_unit VARCHAR(255),
+    structural_context JSON,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (doc_id, chunk_id),  -- Include doc_id from SHARD KEY
+    SHARD KEY (doc_id),
+    SORT KEY(),  -- Columnstore table
+    KEY (prev_chunk_id) USING HASH,
+    KEY (next_chunk_id) USING HASH,
+    KEY (overlap_start_id) USING HASH,
+    KEY (overlap_end_id) USING HASH
+);
+
+-- Add chunk_metadata_id to Document_Embeddings
+ALTER TABLE Document_Embeddings 
+ADD COLUMN chunk_metadata_id BIGINT,
+ADD KEY (chunk_metadata_id) USING HASH;
+
+-- Create index on section_path
+ALTER TABLE Chunk_Metadata 
+ADD FULLTEXT USING VERSION 2 section_path_ft_idx (section_path);
