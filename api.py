@@ -21,9 +21,22 @@ logger.setLevel(os.getenv('LOG_LEVEL', 'INFO'))
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
-app = FastAPI(title="KagSearch API",
-             description="API for document search functionality",
-             version="0.1.0")
+app = FastAPI(
+    title="KagSearch API",
+    description="""
+    API for document processing, search, and knowledge graph functionality.
+    
+    Features:
+    - PDF document upload and processing
+    - Real-time processing status tracking
+    - Natural language search
+    - Knowledge graph visualization
+    - Document analytics
+    
+    For detailed documentation, see /docs/api.md
+    """,
+    version="0.2.0"
+)
 
 # Database connection
 db = None
