@@ -1,16 +1,17 @@
-from fastapi import FastAPI, HTTPException, Query, File, UploadFile
+from fastapi import FastAPI, HTTPException, Query, File, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import logging
 import os
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Union
 from rag_query import RAGQueryEngine
 from db import DatabaseConnection
 import time
-from models import SearchRequest, SearchResponse, SearchResult, Entity, Relationship, KBDataResponse, KBStats, DocumentStats, GraphResponse, GraphData, GraphNode, GraphLink
+from models import SearchRequest, SearchResponse, SearchResult, Entity, Relationship, KBDataResponse, KBStats, DocumentStats, GraphResponse, GraphData, GraphNode, GraphLink, ProcessingStatusResponse
 from datetime import datetime
-import asyncio
-from pdf_processor import save_pdf, create_document_record, process_pdf, get_processing_status, cleanup_processing, PDFProcessingError
+from pdf_processor import save_pdf, create_document_record, get_processing_status, cleanup_processing, PDFProcessingError
+from tasks import process_pdf_task
+from celery.result import AsyncResult
 
 # Initialize logging
 logger = logging.getLogger(__name__)
@@ -50,19 +51,122 @@ async def shutdown_event():
 # CORS Configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # NextJS default port
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend URL
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+class TaskResponse(BaseModel):
+    """Response model for task status"""
+    task_id: str
+    doc_id: int
+    status: str
+    message: Optional[str] = None
+
+# In-memory status cache
+processing_status_cache: Dict[int, ProcessingStatusResponse] = {}
+
+async def update_status_cache(doc_id: int, status: ProcessingStatusResponse):
+    """Update the in-memory status cache"""
+    processing_status_cache[doc_id] = status
+
+@app.get("/processing-status/{doc_id}", response_model=ProcessingStatusResponse)
+async def get_status(doc_id: int):
+    """Get current processing status"""
+    try:
+        # First check the cache
+        if doc_id in processing_status_cache:
+            return processing_status_cache[doc_id]
+            
+        # If not in cache, get from database
+        logger.info(f"Getting processing status for doc_id: {doc_id}")
+        try:
+            status = get_processing_status(doc_id)
+            # Update cache
+            await update_status_cache(doc_id, status)
+            return status
+        except Exception as e:
+            # If database query fails, return last known status from cache
+            if doc_id in processing_status_cache:
+                return processing_status_cache[doc_id]
+            raise
+            
+    except ValueError as e:
+        logger.error(f"Processing status not found: {str(e)}")
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error getting processing status: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/upload-pdf", status_code=status.HTTP_202_ACCEPTED, response_model=TaskResponse)
+async def upload_pdf(file: UploadFile = File(...)):
+    """Upload and process a PDF file"""
+    try:
+        # Save the uploaded file
+        logger.info(f"Saving uploaded file: {file.filename}")
+        file_content = await file.read()
+        file_path = save_pdf(file_content, file.filename)
+        
+        # Create document record
+        doc_id = create_document_record(file.filename, str(file_path), len(file_content))
+        logger.info(f"Created document record with ID: {doc_id}")
+        
+        # Initialize status in cache
+        await update_status_cache(doc_id, ProcessingStatusResponse(
+            currentStep="started",
+            fileName=file.filename
+        ))
+        
+        # Start celery task
+        task = process_pdf_task.delay(doc_id)
+        logger.info(f"Started Celery task {task.id} for doc_id {doc_id}")
+        
+        return TaskResponse(
+            task_id=task.id,
+            doc_id=doc_id,
+            status="pending",
+            message="Processing started"
+        )
+        
+    except PDFProcessingError as e:
+        logger.error(f"PDF processing error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error uploading PDF: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/task-status/{task_id}")
+async def get_task_status(task_id: str):
+    """Get the status of a Celery task"""
+    try:
+        task = AsyncResult(task_id)
+        
+        # Get task state and info
+        state = task.state
+        info = task.info or {}
+        
+        # Build response based on state
+        response = {
+            "task_id": task_id,
+            "status": state,
+            "message": info.get('status', ''),
+            "current": info.get('current', 0),
+            "total": info.get('total', 100)
+        }
+        
+        # Add error info if failed
+        if state == "FAILURE":
+            response["error"] = str(task.result)
+            
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error getting task status: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error getting task status: {str(e)}"
+        )
 
 @app.post("/kag-search", response_model=SearchResponse)
 async def search_documents(request: SearchRequest):
@@ -247,47 +351,6 @@ async def get_graph_data():
             status_code=500,
             detail=f"Error retrieving graph data: {str(e)}"
         )
-
-@app.post("/upload-pdf")
-async def upload_pdf(file: UploadFile = File(...)):
-    try:
-        if not file.filename.lower().endswith('.pdf'):
-            raise HTTPException(status_code=400, detail="Only PDF files are allowed")
-        
-        # Read file content
-        file_content = await file.read()
-        
-        try:
-            # Save PDF file
-            file_path = save_pdf(file_content, file.filename)
-            
-            # Create document record
-            doc_id = create_document_record(
-                filename=file.filename,
-                file_path=file_path,
-                file_size=len(file_content)
-            )
-            
-            # Start processing in background
-            asyncio.create_task(process_pdf(doc_id))
-            
-            return {"doc_id": doc_id}
-            
-        except PDFProcessingError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-            
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/processing-status/{doc_id}")
-async def get_status(doc_id: int):
-    try:
-        status = get_processing_status(doc_id)
-        if not status:
-            raise HTTPException(status_code=404, detail="Processing status not found")
-        return status
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/cancel-processing/{doc_id}")
 async def cancel_processing(doc_id: int):

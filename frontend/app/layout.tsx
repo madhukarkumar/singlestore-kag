@@ -38,6 +38,12 @@ export default function RootLayout({
                   >
                     KB Stats
                   </Link>
+                  <Link
+                    href="/kb/upload"
+                    className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
+                  >
+                    Upload
+                  </Link>
                 </div>
               </div>
             </div>
