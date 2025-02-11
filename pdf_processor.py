@@ -8,6 +8,8 @@ from models import ProcessingStatus, ProcessingStatusResponse
 import logging
 import json
 from knowledge_graph import KnowledgeGraphGenerator
+from openai import OpenAI
+import time
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -170,6 +172,15 @@ def process_pdf(doc_id: int, task=None):
         filename, file_path = result[0]
         logger.info(f"Found document: {filename} at {file_path}")
         
+        # Initialize OpenAI client for this task
+        logger.info("Initializing OpenAI client...")
+        try:
+            client = OpenAI()
+            logger.info("OpenAI client initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize OpenAI client: {str(e)}")
+            raise PDFProcessingError(f"OpenAI client initialization failed: {str(e)}")
+        
         # Update status to chunking
         update_processing_status(doc_id, "chunking")
         if task:
@@ -201,13 +212,41 @@ def process_pdf(doc_id: int, task=None):
             
             # Store text chunks with embeddings
             if text.strip():
-                query = """
-                    INSERT INTO Document_Embeddings 
-                    (doc_id, content)
-                    VALUES (%s, %s)
-                """
-                conn.execute_query(query, (doc_id, text))
-                logger.info(f"Stored text chunk for page {page_num + 1}")
+                chunk_start_time = time.time()
+                logger.info(f"[Page {page_num + 1}] Starting chunk processing")
+                logger.info(f"[Page {page_num + 1}] Text length: {len(text)} characters")
+                
+                # Generate embedding using OpenAI
+                try:
+                    logger.info(f"[Page {page_num + 1}] Generating embedding...")
+                    embedding_start = time.time()
+                    response = client.embeddings.create(
+                        input=text,
+                        model="text-embedding-ada-002"
+                    )
+                    embedding = response.data[0].embedding
+                    embedding_time = time.time() - embedding_start
+                    logger.info(f"[Page {page_num + 1}] Embedding generated in {embedding_time:.2f}s")
+                    logger.info(f"[Page {page_num + 1}] Embedding dimension: {len(embedding)}")
+                    
+                    # Store text and embedding
+                    logger.info(f"[Page {page_num + 1}] Storing in database...")
+                    store_start = time.time()
+                    query = """
+                        INSERT INTO Document_Embeddings 
+                        (doc_id, content, embedding)
+                        VALUES (%s, %s, JSON_ARRAY_PACK(%s))
+                    """
+                    conn.execute_query(query, (doc_id, text, json.dumps(embedding)))
+                    store_time = time.time() - store_start
+                    logger.info(f"[Page {page_num + 1}] Stored in database in {store_time:.2f}s")
+                    
+                    total_chunk_time = time.time() - chunk_start_time
+                    logger.info(f"[Page {page_num + 1}] Total chunk processing time: {total_chunk_time:.2f}s")
+                    
+                except Exception as e:
+                    logger.error(f"[Page {page_num + 1}] Error processing chunk: {str(e)}", exc_info=True)
+                    raise PDFProcessingError(f"Failed to process page {page_num + 1}: {str(e)}")
             
             if task:
                 # Update progress (40% of total progress allocated to PDF processing)
