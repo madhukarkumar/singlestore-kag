@@ -12,11 +12,12 @@ import os
 import logging
 import json
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Any, Optional
 from openai import OpenAI
 from dotenv import load_dotenv
 from db import DatabaseConnection
 from models import Entity, Relationship, SearchResult, SearchResponse
+from config_loader import config
 import re
 import datetime
 
@@ -36,7 +37,7 @@ class RAGQueryEngine:
         Initialize the RAG Query Engine.
         
         Args:
-            debug_output: If True, save intermediate results to JSON files
+            debug_output: If True, enable debug output mode
         """
         # Load environment variables
         load_dotenv(override=True)
@@ -45,18 +46,22 @@ class RAGQueryEngine:
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         if not self.openai_api_key:
             raise ValueError("OPENAI_API_KEY environment variable is required")
-        self.client = OpenAI()  # OpenAI will automatically use the OPENAI_API_KEY environment variable
+        self.openai_client = OpenAI()  # OpenAI will automatically use the OPENAI_API_KEY environment variable
+        
+        # Get configuration
+        self.search_config = config.retrieval['search']
+        self.response_config = config.retrieval['response_generation']
         
         # Debug configuration
         self.debug_output = debug_output
         self.debug_dir = "debug_output"
-        if debug_output:
+        if self.debug_output:
             os.makedirs(self.debug_dir, exist_ok=True)
 
     def get_query_embedding(self, query: str) -> List[float]:
         """Get embedding for the query text."""
         try:
-            response = self.client.embeddings.create(
+            response = self.openai_client.embeddings.create(
                 model="text-embedding-ada-002",
                 input=query
             )
@@ -162,6 +167,98 @@ class RAGQueryEngine:
         
         return sorted(doc_scores.values(), key=lambda d: d["combined_score"], reverse=True)
 
+    def query(self, query_text: str, top_k: int = 5) -> SearchResponse:
+        """Execute a hybrid search query combining vector and text search."""
+        try:
+            with DatabaseConnection() as db:
+                # Get results from both search methods
+                vector_results = self.vector_search(db, self.get_query_embedding(query_text), limit=top_k)
+                text_results = self.text_search(db, query_text, limit=top_k)
+                
+                # Merge results
+                merged_results = self.merge_search_results(vector_results, text_results)
+                
+                if self.debug_output:
+                    self.save_debug_output("search_results", {
+                        "query": query_text,
+                        "results": merged_results
+                    })
+                
+                # Build context with SearchResult objects
+                formatted_results = []
+                for doc in merged_results:
+                    # Get entities for this content
+                    entities = self.get_entities_for_content(db, doc["content"])
+                    
+                    # Get relationships for these entities
+                    relationships = self.get_relationships(db, [e.id for e in entities])
+                    
+                    # Create SearchResult object
+                    search_result = SearchResult(
+                        doc_id=doc["doc_id"],
+                        content=doc["content"],
+                        vector_score=doc.get("vector_score", 0.0),
+                        text_score=doc.get("text_score", 0.0),
+                        combined_score=doc["combined_score"],
+                        entities=entities,
+                        relationships=relationships
+                    )
+                    formatted_results.append(search_result)
+                
+                # Create SearchResponse
+                response = SearchResponse(
+                    query=query_text,
+                    results=formatted_results,
+                    generated_response=self.generate_response(query_text, {"results": formatted_results}),
+                    execution_time=0.0  # We'll set this in the API layer
+                )
+                
+                if self.debug_output:
+                    self.save_debug_output("query_context", response.dict())
+                
+                return response
+                
+        except Exception as e:
+            logger.error(f"Query execution error: {str(e)}", exc_info=True)
+            raise  # Let the API layer handle the error
+
+    def _build_prompt(self, query: str, context: Dict) -> str:
+        """Build prompt for the LLM using retrieved context."""
+        return config.get_response_prompt(query, context)
+        
+    def generate_response(self, query: str, context: Dict[str, Any]) -> str:
+        """Generate a response using the LLM."""
+        try:
+            prompt = self._build_prompt(query, context)
+            
+            # Create API parameters
+            api_params = {
+                "model": self.response_config.get('model', 'o3-mini'),
+                "messages": [
+                    {"role": "system", "content": "You are a helpful assistant that answers questions based on the provided context."},
+                    {"role": "user", "content": prompt}
+                ]
+            }
+            
+            # Add model-specific parameters
+            if 'o3-' in api_params["model"]:
+                api_params["max_completion_tokens"] = self.response_config['max_tokens']
+            else:
+                api_params["max_tokens"] = self.response_config['max_tokens']
+                api_params["temperature"] = self.response_config['temperature']
+            
+            response = self.openai_client.chat.completions.create(**api_params)
+            
+            if not response.choices:
+                logger.error("No response from OpenAI")
+                return "I apologize, but I couldn't generate a response at this time."
+                
+            return response.choices[0].message.content
+            
+        except Exception as e:
+            logger.error(f"Error generating response: {str(e)}")
+            return "I apologize, but I encountered an error while generating the response."
+
     def get_entities_for_content(self, db: DatabaseConnection, content: str) -> List[Entity]:
         """Find entities mentioned in the content."""
         try:
@@ -263,105 +360,6 @@ class RAGQueryEngine:
             logger.error(f"Error getting relationships: {str(e)}", exc_info=True)
             return []
 
-    def generate_response(self, query: str, context: Dict) -> str:
-        """Generate natural language response using OpenAI."""
-        try:
-            # Format context sections
-            doc_section = "\n\n".join([
-                f"Document {i+1}:\n"
-                f"Content: {result.content}\n"
-                f"Relevance Score: {result.combined_score:.3f}"
-                for i, result in enumerate(context["results"])
-            ])
-
-            # Create a list of unique entities (using Entity's __hash__ and __eq__)
-            all_entities = list({entity for result in context["results"] for entity in result.entities})
-
-            entity_section = "\n".join([
-                f"- {entity.name} (Type: {entity.category})"
-                for entity in all_entities
-            ])
-
-            # Create a list of unique relationships
-            all_relationships = list({
-                (rel.source_entity_id, rel.target_entity_id, rel.relation_type)
-                for result in context["results"]
-                for rel in result.relationships
-            })
-
-            rel_section = "\n".join([
-                f"- {rel_type}: Entity {src_id} -> Entity {tgt_id}"
-                for src_id, tgt_id, rel_type in all_relationships
-            ])
-
-            # Build the prompt
-            prompt = self._build_prompt(
-                query=query,
-                context={
-                    "chunks": context["results"],
-                    "query": query
-                }
-            )
-            
-            if self.debug_output:
-                self.save_debug_output("formatted_prompt", {"prompt": prompt})
-            
-            # Call OpenAI
-            response = self.client.chat.completions.create(
-                model="gpt-4-0125-preview",
-                messages=[
-                    {
-                        "role": "system", 
-                        "content": """You are a knowledgeable assistant that provides accurate answers based on the given context. 
-                        Follow these rules:
-                        1. Only use information from the provided documents to answer the query
-                        2. If the documents don't contain relevant information, say so
-                        3. Make connections between entities and their relationships when relevant
-                        4. Format your response with proper paragraphs and line breaks
-                        5. Be concise but thorough"""
-                    },
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.3
-            )
-            
-            return response.choices[0].message.content
-            
-        except Exception as e:
-            logger.error(f"Error generating response: {str(e)}", exc_info=True)
-            return f"I apologize, but I encountered an error while generating the response. Please try rephrasing your query or contact support if the issue persists."
-
-    def _build_prompt(self, query: str, context: Dict) -> str:
-        """Build prompt for the LLM using retrieved context."""
-        prompt = f"""Answer the following question based on the provided context. 
-Question: {query}
-
-Context:
-"""
-        # Convert chunks to dictionaries if they are Pydantic models
-        chunks = []
-        for chunk in context["chunks"]:
-            if hasattr(chunk, 'model_dump'):  # Pydantic v2 model
-                chunk_dict = chunk.model_dump()
-            elif hasattr(chunk, 'dict'):  # Pydantic v1 model
-                chunk_dict = chunk.dict()
-            else:
-                chunk_dict = chunk
-            chunks.append(chunk_dict)
-
-        # Add relevant chunks
-        for i, chunk in enumerate(chunks, 1):
-            prompt += f"\nChunk {i}:\n{chunk['content']}\n"
-
-        prompt += """
-Please provide a comprehensive answer that:
-1. Uses information from all relevant chunks
-2. Maintains proper context
-3. Cites specific information when appropriate
-
-Answer:"""
-        return prompt
-
     def save_debug_output(self, stage: str, data: Dict) -> None:
         """Save intermediate results for debugging."""
         if not self.debug_output:
@@ -378,64 +376,3 @@ Answer:"""
             
         except Exception as e:
             logger.warning(f"Failed to save debug output: {str(e)}")
-
-    def query(self, query_text: str, top_k: int = 5) -> SearchResponse:
-        """Execute a hybrid search query combining vector and text search."""
-        try:
-            with DatabaseConnection() as db:
-                # Get results from both search methods
-                vector_results = self.vector_search(db, self.get_query_embedding(query_text), limit=top_k)
-                text_results = self.text_search(db, query_text, limit=top_k)
-                
-                # Merge results
-                merged_results = self.merge_search_results(
-                    vector_results=vector_results,
-                    text_results=text_results,
-                    vector_weight=0.7
-                )[:top_k]
-                
-                if self.debug_output:
-                    self.save_debug_output("search_results", {
-                        "query": query_text,
-                        "vector_results": vector_results,
-                        "text_results": text_results,
-                        "merged_results": merged_results
-                    })
-                
-                # Build context with SearchResult objects
-                formatted_results = []
-                for doc in merged_results:
-                    # Get entities for this content
-                    entities = self.get_entities_for_content(db, doc["content"])
-                    
-                    # Get relationships for these entities
-                    relationships = self.get_relationships(db, [e.id for e in entities])
-                    
-                    # Create SearchResult object
-                    search_result = SearchResult(
-                        doc_id=doc["doc_id"],
-                        content=doc["content"],
-                        vector_score=doc.get("vector_score", 0.0),
-                        text_score=doc.get("text_score", 0.0),
-                        combined_score=doc["combined_score"],
-                        entities=entities,
-                        relationships=relationships
-                    )
-                    formatted_results.append(search_result)
-                
-                # Create SearchResponse
-                response = SearchResponse(
-                    query=query_text,
-                    results=formatted_results,
-                    generated_response=self.generate_response(query_text, {"results": formatted_results}),
-                    execution_time=0.0  # We'll set this in the API layer
-                )
-                
-                if self.debug_output:
-                    self.save_debug_output("query_context", response.dict())
-                
-                return response
-                
-        except Exception as e:
-            logger.error(f"Query execution error: {str(e)}", exc_info=True)
-            raise  # Let the API layer handle the error

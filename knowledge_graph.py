@@ -9,11 +9,13 @@ import os
 import json
 import logging
 from typing import Dict, List, Any, Optional
-import openai
+from openai import OpenAI
+import os
 from dotenv import load_dotenv
 from db import DatabaseConnection
 import time
 import datetime
+from config_loader import config
 
 # Configure logging
 logging.basicConfig(
@@ -37,7 +39,10 @@ class KnowledgeGraphGenerator:
         load_dotenv(override=True)
         
         # Set up OpenAI client
-        self.openai_client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        self.openai_client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        
+        # Get entity extraction config
+        self.extraction_config = config.knowledge_creation['entity_extraction']
         
         # Debug configuration
         self.debug_output = debug_output
@@ -45,80 +50,86 @@ class KnowledgeGraphGenerator:
         if debug_output:
             os.makedirs(self.debug_dir, exist_ok=True)
         
-    def extract_knowledge_sync(self, text: str, doc_id: int, chunk_id: int) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        Synchronously extract entities and relationships from text using OpenAI
-        """
+    def extract_knowledge_sync(self, text: str) -> Dict[str, Any]:
+        """Extract knowledge from text synchronously."""
+        logger.info("Extracting knowledge from text")
+        logger.info(f"Text length: {len(text)} characters")
+        
+        # Build the prompt
+        prompt = config.get_extraction_prompt(text)
+        
+        # Create API parameters with only supported parameters
+        api_params = {
+            "model": self.extraction_config['model'],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": self.extraction_config['system_prompt']
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "response_format": {"type": "json_object"},
+            "reasoning_effort": "medium"
+        }
+        
+        # Make synchronous API call
         try:
-            # Create the prompt for entity and relationship extraction
-            prompt = f"""
-            Extract entities and their relationships from the following text. 
-            Return a JSON object with two arrays: 'entities' and 'relationships'.
+            response = self.openai_client.chat.completions.create(**api_params)
             
-            Each entity should have:
-            - name: The entity name
-            - description: A brief description
-            - category: The type of entity (e.g., Person, Organization, Technology)
-            - aliases: Alternative names (optional)
+            if not response.choices:
+                logger.error("No response from OpenAI")
+                return {"entities": [], "relationships": []}
             
-            Each relationship should have:
-            - source: The source entity name
-            - target: The target entity name
-            - relation_type: The type of relationship
+            # Get the response content and ensure it's clean
+            content = response.choices[0].message.content.strip()
+            logger.debug(f"Raw response: {content}")
             
-            Text to analyze:
-            {text}
-            """
-            
-            # Make synchronous API call
             try:
-                response = self.openai_client.chat.completions.create(
-                    model="gpt-4",
-                    messages=[
-                        {"role": "system", "content": "You are a knowledge graph generator that extracts entities and relationships from text."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.3,
-                    max_tokens=1000
-                )
+                # Parse the JSON response
+                knowledge = json.loads(content)
                 
-                # Parse response
-                try:
-                    content = response.choices[0].message.content
-                    result = json.loads(content)
-                    
-                    # Validate response structure
-                    if not isinstance(result, dict):
-                        raise ValueError("Response is not a dictionary")
-                    if 'entities' not in result or 'relationships' not in result:
-                        raise ValueError("Response missing required fields")
-                        
-                    # Ensure all entities have required fields
-                    for entity in result['entities']:
-                        entity.setdefault('description', '')
-                        entity.setdefault('aliases', [])
-                        if 'name' not in entity or 'category' not in entity:
-                            raise ValueError(f"Entity missing required fields: {entity}")
-                    
-                    # Ensure all relationships have required fields
-                    for rel in result['relationships']:
-                        if not all(k in rel for k in ['source', 'target', 'relation_type']):
-                            raise ValueError(f"Relationship missing required fields: {rel}")
-                            
-                    return result
-                    
-                except json.JSONDecodeError as e:
-                    logger.error(f"Failed to parse OpenAI response: {e}")
-                    return {'entities': [], 'relationships': []}
-                    
-            except Exception as e:
-                logger.error(f"OpenAI API error: {str(e)}")
-                return {'entities': [], 'relationships': []}
+                # Ensure required structure
+                if not isinstance(knowledge, dict):
+                    logger.error("Response is not a dictionary")
+                    return {"entities": [], "relationships": []}
                 
+                knowledge.setdefault("entities", [])
+                knowledge.setdefault("relationships", [])
+                
+                # Validate entities and relationships
+                valid_entities = []
+                for entity in knowledge["entities"]:
+                    if isinstance(entity, dict) and "name" in entity and "type" in entity:
+                        # Convert type to category for database
+                        entity["category"] = entity["type"]
+                        entity.setdefault("metadata", {"confidence": 0.7})
+                        valid_entities.append(entity)
+                
+                valid_relationships = []
+                for rel in knowledge["relationships"]:
+                    if isinstance(rel, dict) and all(k in rel for k in ["source", "target", "type"]):
+                        # Convert type to relation_type for database
+                        rel["relation_type"] = rel["type"]
+                        rel.setdefault("metadata", {"confidence": 0.7})
+                        valid_relationships.append(rel)
+                
+                knowledge["entities"] = valid_entities
+                knowledge["relationships"] = valid_relationships
+                
+                return knowledge
+                
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse JSON response: {str(e)}")
+                logger.debug(f"Problematic content: {content}")
+                return {"entities": [], "relationships": []}
+            
         except Exception as e:
-            logger.error(f"Error in knowledge extraction: {str(e)}", exc_info=True)
-            return {'entities': [], 'relationships': []}
-    
+            logger.error(f"Error in knowledge extraction: {str(e)}")
+            return {"entities": [], "relationships": []}
+            
     def save_debug_output(self, data: Dict, doc_id: int, chunk_id: Optional[int] = None) -> None:
         """
         Save extracted knowledge to a JSON file for debugging.
@@ -171,10 +182,11 @@ class KnowledgeGraphGenerator:
             Dict containing merged entity information
         """
         # Use the longer description
-        merged_description = max(
-            [existing_entity["description"], new_entity["description"]], 
-            key=lambda x: len(x.strip())
-        )
+        descriptions = [
+            existing_entity.get("description", ""),
+            new_entity.get("description", "")
+        ]
+        merged_description = max(descriptions, key=lambda x: len(x.strip()))
         
         # Merge and deduplicate aliases
         merged_aliases = list(set(
@@ -183,7 +195,7 @@ class KnowledgeGraphGenerator:
         ))
         
         # Keep original category unless it's empty
-        category = existing_entity["category"] if existing_entity["category"] else new_entity["category"]
+        category = existing_entity.get("category") or new_entity.get("category", "")
         
         return {
             "name": existing_entity["name"],
@@ -266,7 +278,7 @@ class KnowledgeGraphGenerator:
                             insert_entity_query,
                             (
                                 entity["name"],
-                                entity["description"],
+                                entity.get("description", ""),  # Use empty string as default
                                 json.dumps(entity.get("aliases", [])),
                                 entity["category"]
                             )
@@ -277,11 +289,10 @@ class KnowledgeGraphGenerator:
                 for rel in knowledge["relationships"]:
                     insert_rel_query = """
                     INSERT INTO Relationships 
-                    (source_entity_id, target_entity_id, relation_type, doc_id)
+                    (source_entity_id, target_entity_id, relation_type)
                     SELECT DISTINCT
                         s.entity_id, 
                         t.entity_id, 
-                        %s,
                         %s
                     FROM Entities s
                     JOIN Entities t
@@ -291,7 +302,6 @@ class KnowledgeGraphGenerator:
                         insert_rel_query,
                         (
                             rel["relation_type"],
-                            rel.get("doc_id"),
                             rel["source"],
                             rel["target"]
                         )
@@ -311,7 +321,7 @@ class KnowledgeGraphGenerator:
         except Exception as e:
             logger.error(f"Error storing knowledge: {str(e)}", exc_info=True)
             raise
-    
+
     def process_document(self, doc_id: int) -> None:
         """
         Process all chunks from a document to extract and store knowledge.
@@ -336,9 +346,9 @@ class KnowledgeGraphGenerator:
                     
                     # Extract knowledge
                     logger.info(f"Processing chunk {chunk_id} from document {doc_id}")
-                    knowledge = self.extract_knowledge_sync(chunk_text, doc_id, chunk_id)
+                    knowledge = self.extract_knowledge_sync(chunk_text)
                     
-                    # Save debug output
+                    # Save debug output if enabled
                     self.save_debug_output(knowledge, doc_id, chunk_id)
                     
                     # Store knowledge
