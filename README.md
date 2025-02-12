@@ -35,6 +35,14 @@ A full-stack application that processes documents to create semantic embeddings 
 
 ## Version History
 
+### v1.0.0 (2025-02-11)
+- Stable release with production-ready features
+- Optimized vector search using SingleStore session variables
+- Enhanced hybrid search with configurable weights
+- Improved error handling and debugging capabilities
+- Comprehensive logging and error reporting
+- Added detailed changelog (see CHANGELOG.md)
+
 ### v1.2 (2025-02-11)
 - Improved semantic chunking with structured Gemini prompts
 - Enhanced document structure preservation
