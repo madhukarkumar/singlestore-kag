@@ -157,7 +157,7 @@ export default function KnowledgeGraph() {
   if (!graphData) return null;
 
   return (
-    <div className="w-full h-[600px] bg-white rounded-lg shadow-lg p-4 relative mb-8">
+    <div className="w-full h-full bg-white rounded-lg shadow-lg p-4 relative overflow-hidden">
       {/* Graph Controls */}
       <div className="absolute top-4 left-4 z-10 flex space-x-2">
         <button
@@ -241,11 +241,6 @@ export default function KnowledgeGraph() {
           linkDirectionalParticleColor={() => '#4f46e5'}
           linkCurvature={0.1}
           cooldownTicks={100}
-          onEngineStop={() => {
-            if (graphRef.current) {
-              graphRef.current.zoomToFit(400, 50);
-            }
-          }}
           onNodeClick={handleNodeClick}
           nodeCanvasObject={(node, ctx, globalScale) => {
             const label = node.name;

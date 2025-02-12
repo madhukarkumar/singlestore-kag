@@ -106,7 +106,7 @@ export default function KBPage() {
       {/* Graph Section */}
       <section className="mb-16">
         <h2 className="text-2xl font-semibold mb-6">Knowledge Graph</h2>
-        <div className="bg-gray-50 rounded-xl p-4">
+        <div className="bg-gray-50 rounded-xl p-4 h-[800px] overflow-hidden">
           <KnowledgeGraph />
         </div>
       </section>
