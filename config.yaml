@@ -22,12 +22,12 @@ knowledge_creation:
 retrieval:
   search:
     top_k: 10
-    vector_weight: 0.7
-    text_weight: 0.3
-    exact_phrase_weight: 2.0
-    single_term_weight: 1.0
-    proximity_distance: 10
-    min_score_threshold: 0.1
+    vector_weight: 0.5
+    text_weight: 0.5
+    exact_phrase_weight: 3.0
+    single_term_weight: 1.5
+    proximity_distance: 5
+    min_score_threshold: 0.15
     min_similarity_score: 0.4
     context_window_size: 2
   response_generation:

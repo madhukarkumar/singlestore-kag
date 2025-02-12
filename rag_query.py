@@ -158,9 +158,13 @@ class RAGQueryEngine:
         self, 
         vector_results: List[Dict], 
         text_results: List[Dict],
-        vector_weight: float = 0.7
+        vector_weight: float = None
     ) -> List[Dict]:
         """Merge and rank results from vector and text searches."""
+        # Use vector_weight from config if not provided
+        if vector_weight is None:
+            vector_weight = self.search_config["vector_weight"]
+        
         # Normalize scores
         vec_max = max([r["score"] for r in vector_results]) if vector_results else 1.0
         txt_max = max([r["text_score"] for r in text_results]) if text_results else 1.0
