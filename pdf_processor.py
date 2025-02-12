@@ -12,6 +12,7 @@ from openai import OpenAI
 import google.generativeai as genai
 from google.generativeai.types import GenerateContentResponse
 import re
+from config_loader import config
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -89,7 +90,15 @@ def create_document_record(filename: str, file_path: str, file_size: int) -> int
             VALUES (%s, %s, %s, %s, 'started')
         """
         conn.execute_query(query, (doc_id, filename, file_path, file_size))
-        logger.info("Processing status record created")
+        logger.info(f"Processing status record created for doc_id {doc_id}")
+        
+        # Verify the record was created
+        verify_query = "SELECT file_path FROM ProcessingStatus WHERE doc_id = %s"
+        result = conn.execute_query(verify_query, (doc_id,))
+        if not result:
+            logger.error(f"Failed to find ProcessingStatus record for doc_id {doc_id}")
+        else:
+            logger.info(f"Verified ProcessingStatus record exists for doc_id {doc_id}")
         
         return doc_id
     except Exception as e:
@@ -162,13 +171,12 @@ def cleanup_processing(doc_id: int):
 def get_semantic_chunks(text: str) -> List[str]:
     """Use Gemini to get semantic chunks from text."""
     try:
+        # Get chunking configuration
+        chunking_config = config.knowledge_creation['chunking']
+        
         prompt = f"""Split the following text into semantic chunks. Each chunk should be a coherent unit of information.
         Follow these rules strictly:
-        1. Always keep section headers with their immediate content
-        2. Keep feature lists and technical specifications together with their parent section
-        3. Maintain the relationship between titles/subtitles and their descriptions
-        4. For lists of features or capabilities, keep the entire list in one chunk
-        5. Keep related concepts together, especially for lists and feature descriptions
+        {config.get_chunking_rules()}
 
         Return only the chunks, one per line, with '---' as separator.
         
@@ -196,16 +204,29 @@ def get_semantic_chunks(text: str) -> List[str]:
             logger.warning("No valid chunks found in Gemini response, falling back to basic chunking")
             return [text]
             
+        # Apply size constraints from config
+        filtered_chunks = []
+        for chunk in chunks:
+            if chunking_config['min_chunk_size'] <= len(chunk) <= chunking_config['max_chunk_size']:
+                filtered_chunks.append(chunk)
+            else:
+                logger.warning(f"Chunk size {len(chunk)} outside configured bounds, skipping")
+        
+        # If all chunks were filtered out, fall back to basic chunking
+        if not filtered_chunks:
+            logger.warning("All chunks filtered out, falling back to basic chunking")
+            return [text]
+            
         # Log each chunk
-        logger.info(f"Generated {len(chunks)} semantic chunks:")
-        for i, chunk in enumerate(chunks, 1):
-            logger.info(f"Chunk {i}/{len(chunks)}:")
+        logger.info(f"Generated {len(filtered_chunks)} semantic chunks:")
+        for i, chunk in enumerate(filtered_chunks, 1):
+            logger.info(f"Chunk {i}/{len(filtered_chunks)}:")
             logger.info(f"Length: {len(chunk)} characters")
             logger.info(f"Content: {chunk}")
             logger.info("-" * 80)
             
-        return chunks
-        
+        return filtered_chunks
+            
     except Exception as e:
         logger.error(f"Error in semantic chunking: {str(e)}")
         logger.warning("Falling back to basic chunking")
@@ -328,7 +349,7 @@ def process_chunks_with_overlap(
     chunks: List[str],
     doc_id: int,
     structure: Dict[str, Any],
-    overlap_size: int = 200
+    overlap_size: int = None
 ) -> List[Dict[str, Any]]:
     """
     Process chunks adding overlap and metadata.
@@ -342,6 +363,9 @@ def process_chunks_with_overlap(
     Returns:
         List of enhanced chunks with metadata
     """
+    if overlap_size is None:
+        overlap_size = config.knowledge_creation['chunking']['overlap_size']
+    
     enhanced_chunks = []
     chunk_ids = {}  # Store chunk IDs for linking
     
@@ -471,15 +495,19 @@ def process_pdf(doc_id: int, task=None):
                     )
                 )
             
-            # Extract and store knowledge graph
-            kg = KnowledgeGraphGenerator()
+            # Extract and store knowledge
+            kg = KnowledgeGraphGenerator(debug_output=True)
             for i, chunk in enumerate(enhanced_chunks):
-                knowledge = kg.extract_knowledge_sync(
-                    text=chunk['content'],
-                    doc_id=doc_id,
-                    chunk_id=chunk['metadata']['position']  # Use position as chunk_id
-                )
-                kg.store_knowledge(knowledge, conn)
+                chunk_text = chunk['content']
+                logger.debug(f"Processing chunk {i}, content: {repr(chunk_text)}")  # Debug log
+                try:
+                    knowledge = kg.extract_knowledge_sync(chunk_text)
+                    if knowledge:
+                        kg.store_knowledge(knowledge, conn)
+                except Exception as e:
+                    logger.error(f"Error processing chunk {i}: {str(e)}")
+                    logger.debug(f"Problematic chunk content: {repr(chunk_text)}")
+                    continue  # Skip failed chunk and continue with others
             
             # Update status to completed
             update_processing_status(doc_id, "completed")
