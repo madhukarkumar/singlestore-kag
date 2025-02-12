@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import logging
 import os
+import yaml
 from typing import List, Dict, Optional, Union
 from rag_query import RAGQueryEngine
 from db import DatabaseConnection
@@ -35,7 +36,7 @@ app = FastAPI(
     
     For detailed documentation, see /docs/api.md
     """,
-    version="0.2.0"
+    version="0.2.1"
 )
 
 # Database connection
@@ -372,3 +373,94 @@ async def cancel_processing(doc_id: int):
         return {"status": "cancelled"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# Configuration Models
+class ChunkingConfig(BaseModel):
+    semantic_rules: List[str]
+    overlap_size: int = Field(ge=0)
+    min_chunk_size: int = Field(ge=0)
+    max_chunk_size: int = Field(ge=0)
+
+class EntityExtractionConfig(BaseModel):
+    model: str
+    confidence_threshold: float = Field(ge=0.0, le=1.0)
+    min_description_length: int = Field(ge=0)
+    max_description_length: int = Field(ge=0)
+    description_required: bool
+    system_prompt: str
+    extraction_prompt_template: str
+
+class SearchConfig(BaseModel):
+    top_k: int = Field(ge=1)
+    vector_weight: float = Field(ge=0.0, le=1.0)
+    text_weight: float = Field(ge=0.0, le=1.0)
+    exact_phrase_weight: float = Field(ge=0.0)
+    single_term_weight: float = Field(ge=0.0)
+    proximity_distance: int = Field(ge=0)
+    min_score_threshold: float = Field(ge=0.0, le=1.0)
+    min_similarity_score: float = Field(ge=0.0, le=1.0)
+    context_window_size: int = Field(ge=0)
+
+class ResponseGenerationConfig(BaseModel):
+    temperature: float = Field(ge=0.0, le=1.0)
+    max_tokens: int = Field(ge=0)
+    citation_style: str
+    include_confidence: bool
+    prompt_template: str
+
+class RetrievalConfig(BaseModel):
+    search: SearchConfig
+    response_generation: ResponseGenerationConfig
+
+class KnowledgeCreationConfig(BaseModel):
+    chunking: ChunkingConfig
+    entity_extraction: EntityExtractionConfig
+
+class FullConfig(BaseModel):
+    knowledge_creation: KnowledgeCreationConfig
+    retrieval: RetrievalConfig
+
+CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
+
+@app.get("/config", response_model=FullConfig, tags=["config"])
+async def get_config():
+    try:
+        logger.info(f"Loading config from {CONFIG_PATH}")
+        if not os.path.exists(CONFIG_PATH):
+            raise HTTPException(status_code=404, detail=f"Config file not found at {CONFIG_PATH}")
+        
+        with open(CONFIG_PATH, 'r') as f:
+            try:
+                config = yaml.safe_load(f)
+                logger.info("YAML loaded successfully")
+                logger.info(f"Config structure: {config.keys()}")
+            except yaml.YAMLError as e:
+                logger.error(f"YAML parsing error: {str(e)}")
+                raise HTTPException(status_code=500, detail=f"Error parsing config YAML: {str(e)}")
+            
+            try:
+                config_model = FullConfig(**config)
+                logger.info("Config validated successfully")
+                return config_model
+            except Exception as e:
+                logger.error(f"Config validation error: {str(e)}")
+                raise HTTPException(status_code=500, detail=f"Config validation error: {str(e)}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+@app.post("/config", tags=["config"])
+async def update_config(config: FullConfig):
+    try:
+        logger.info(f"Updating config at {CONFIG_PATH}")
+        # Convert to dict and save to yaml
+        config_dict = config.dict()
+        with open(CONFIG_PATH, 'w') as f:
+            yaml.safe_dump(config_dict, f, default_flow_style=False)
+        logger.info("Config updated successfully")
+        return {"status": "success", "message": "Configuration updated successfully"}
+    except Exception as e:
+        logger.error(f"Error updating config: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error updating config: {str(e)}")

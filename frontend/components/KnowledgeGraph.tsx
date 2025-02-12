@@ -245,14 +245,30 @@ export default function KnowledgeGraph() {
           nodeCanvasObject={(node, ctx, globalScale) => {
             const label = node.name;
             const fontSize = 12/globalScale;
+            const nodeColor = categoryColors[
+              Array.from(new Set(graphData.nodes.map(n => n.category)))
+                .indexOf(node.category) % categoryColors.length
+            ];
+            
+            // Draw circle
+            ctx.beginPath();
+            ctx.fillStyle = nodeColor;
+            const size = 4 / globalScale;  // Fixed 4px radius (8px diameter)
+            ctx.arc(node.x, node.y, size, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            // Draw label
             ctx.font = `${fontSize}px Inter, system-ui, -apple-system, sans-serif`;
             const textWidth = ctx.measureText(label).width;
             const bckgDimensions = [textWidth, fontSize].map(n => n + fontSize * 0.2);
 
+            // Position label below the circle
+            const labelY = node.y + size + fontSize/2;
+            
             ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
             ctx.fillRect(
               node.x - bckgDimensions[0] / 2,
-              node.y - bckgDimensions[1] / 2,
+              labelY - bckgDimensions[1] / 2,
               ...bckgDimensions
             );
 
@@ -260,11 +276,8 @@ export default function KnowledgeGraph() {
             ctx.textBaseline = 'middle';
             ctx.fillStyle = selectedNode && selectedNode.id !== node.id ? 
               '#666' : 
-              categoryColors[
-                Array.from(new Set(graphData.nodes.map(n => n.category)))
-                  .indexOf(node.category) % categoryColors.length
-              ];
-            ctx.fillText(label, node.x, node.y);
+              nodeColor;
+            ctx.fillText(label, node.x, labelY);
           }}
         />
       </div>

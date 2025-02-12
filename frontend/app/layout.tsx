@@ -44,6 +44,12 @@ export default function RootLayout({
                   >
                     Upload
                   </Link>
+                  <Link
+                    href="/config"
+                    className="text-gray-300 hover:text-white px-3 py-2 rounded-md text-sm font-medium"
+                  >
+                    Settings
+                  </Link>
                 </div>
               </div>
             </div>
