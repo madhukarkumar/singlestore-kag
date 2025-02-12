@@ -15,6 +15,9 @@ knowledge_creation:
   entity_extraction:
     model: "o3-mini-2025-01-31"
     confidence_threshold: 0.5
+    min_description_length: 50
+    max_description_length: 500
+    description_required: true
     system_prompt: |
       You are a knowledge extraction system. Extract entities and relationships from text.
       ONLY output a valid JSON object with this structure:
@@ -23,7 +26,13 @@ knowledge_creation:
           {
             "name": "<entity name>",
             "type": "<PERSON|ORGANIZATION|LOCATION|TECHNOLOGY|CONCEPT|EVENT|PRODUCT>",
-            "metadata": {"confidence": 0.7}
+            "description": "<A detailed description of the entity, including its key characteristics, role, and significance in the context>",
+            "aliases": ["<alternative names>"],
+            "metadata": {
+              "confidence": 0.7,
+              "context_relevance": 0.8,
+              "description_quality": 0.7
+            }
           }
         ],
         "relationships": [
@@ -31,14 +40,32 @@ knowledge_creation:
             "source": "<source entity name>",
             "target": "<target entity name>",
             "type": "<relationship type>",
-            "metadata": {"confidence": 0.7}
+            "description": "<A brief description of how these entities are related>",
+            "metadata": {
+              "confidence": 0.7,
+              "context_relevance": 0.8
+            }
           }
         ]
       }
       DO NOT include any text outside the JSON.
-    extraction_prompt_template: |
-      Extract entities and relationships from this text:
       
+      Guidelines for descriptions:
+      1. Be specific and detailed about the entity's role and significance
+      2. Include relevant technical details when available
+      3. Maintain proper technical context
+      4. Use objective, factual language
+      5. Include version numbers or dates if mentioned
+      6. Reference related entities when relevant
+    extraction_prompt_template: |
+      Extract entities and relationships from this text. For each entity:
+      - Provide a detailed description
+      - Include any alternative names or aliases
+      - Specify technical details when present
+      - Note relationships with other entities
+      - Maintain proper technical context
+      
+      Text to analyze:
       {text}
       
 retrieval:

@@ -99,13 +99,33 @@ class KnowledgeGraphGenerator:
                 knowledge.setdefault("entities", [])
                 knowledge.setdefault("relationships", [])
                 
-                # Validate entities and relationships
+                # Validate entities and relationships with enhanced checks
                 valid_entities = []
                 for entity in knowledge["entities"]:
                     if isinstance(entity, dict) and "name" in entity and "type" in entity:
                         # Convert type to category for database
                         entity["category"] = entity["type"]
-                        entity.setdefault("metadata", {"confidence": 0.7})
+                        
+                        # Ensure description meets minimum requirements
+                        description = entity.get("description", "").strip()
+                        if description and len(description) >= self.extraction_config.get('min_description_length', 50):
+                            entity["description"] = description
+                        else:
+                            # Generate a basic description from context if missing
+                            entity["description"] = self._generate_basic_description(entity, text)
+                        
+                        # Enhanced metadata
+                        metadata = entity.get("metadata", {})
+                        metadata.update({
+                            "confidence": metadata.get("confidence", 0.7),
+                            "context_relevance": metadata.get("context_relevance", 0.7),
+                            "description_quality": self._calculate_description_quality(entity["description"])
+                        })
+                        entity["metadata"] = metadata
+                        
+                        # Handle aliases
+                        entity.setdefault("aliases", [])
+                        
                         valid_entities.append(entity)
                 
                 valid_relationships = []
@@ -113,7 +133,19 @@ class KnowledgeGraphGenerator:
                     if isinstance(rel, dict) and all(k in rel for k in ["source", "target", "type"]):
                         # Convert type to relation_type for database
                         rel["relation_type"] = rel["type"]
-                        rel.setdefault("metadata", {"confidence": 0.7})
+                        
+                        # Add relationship description if missing
+                        if not rel.get("description"):
+                            rel["description"] = self._generate_relationship_description(rel)
+                        
+                        # Enhanced metadata
+                        metadata = rel.get("metadata", {})
+                        metadata.update({
+                            "confidence": metadata.get("confidence", 0.7),
+                            "context_relevance": metadata.get("context_relevance", 0.7)
+                        })
+                        rel["metadata"] = metadata
+                        
                         valid_relationships.append(rel)
                 
                 knowledge["entities"] = valid_entities
@@ -129,7 +161,107 @@ class KnowledgeGraphGenerator:
         except Exception as e:
             logger.error(f"Error in knowledge extraction: {str(e)}")
             return {"entities": [], "relationships": []}
+
+    def _calculate_description_quality(self, description: str) -> float:
+        """Calculate a quality score for an entity description."""
+        if not description:
+            return 0.0
             
+        # Basic quality metrics
+        length_score = min(len(description) / 200, 1.0)  # Normalize by ideal length
+        has_context = any(word in description.lower() for word in ["is", "was", "are", "means", "refers"])
+        has_details = len(description.split()) >= 10
+        
+        # Combine scores
+        quality_score = (length_score + float(has_context) + float(has_details)) / 3
+        return round(quality_score, 2)
+
+    def _generate_basic_description(self, entity: Dict, context: str) -> str:
+        """Generate a basic description for an entity from context."""
+        name = entity["name"]
+        category = entity["category"]
+        
+        # Find the sentence containing the entity name
+        sentences = context.split('.')
+        relevant_sentences = [s for s in sentences if name.lower() in s.lower()]
+        
+        if relevant_sentences:
+            # Use the most relevant sentence as description
+            description = relevant_sentences[0].strip()
+        else:
+            # Fallback to a basic description
+            description = f"A {category.lower()} mentioned in the document"
+            
+        return description
+
+    def _generate_relationship_description(self, relationship: Dict) -> str:
+        """Generate a description for a relationship."""
+        source = relationship["source"]
+        target = relationship["target"]
+        rel_type = relationship["relation_type"]
+        
+        return f"Describes how {source} {rel_type.lower()} {target}"
+
+    def merge_entity_info(self, existing_entity: Dict, new_entity: Dict) -> Dict:
+        """
+        Merge information from multiple occurrences of the same entity.
+        
+        Args:
+            existing_entity: Currently stored entity information
+            new_entity: New entity information to merge
+            
+        Returns:
+            Dict containing merged entity information
+        """
+        # Get descriptions
+        existing_desc = existing_entity.get("description", "").strip()
+        new_desc = new_entity.get("description", "").strip()
+        
+        # Merge descriptions intelligently
+        if existing_desc and new_desc:
+            # Use the higher quality description
+            existing_quality = self._calculate_description_quality(existing_desc)
+            new_quality = self._calculate_description_quality(new_desc)
+            
+            if new_quality > existing_quality:
+                merged_description = new_desc
+            else:
+                merged_description = existing_desc
+        else:
+            merged_description = existing_desc or new_desc
+        
+        # Merge and deduplicate aliases
+        merged_aliases = list(set(
+            existing_entity.get("aliases", []) + 
+            new_entity.get("aliases", [])
+        ))
+        
+        # Keep original category unless it's empty
+        category = existing_entity.get("category") or new_entity.get("category", "")
+        
+        # Merge metadata
+        existing_meta = existing_entity.get("metadata", {})
+        new_meta = new_entity.get("metadata", {})
+        merged_metadata = {
+            "confidence": max(
+                existing_meta.get("confidence", 0.0),
+                new_meta.get("confidence", 0.0)
+            ),
+            "context_relevance": max(
+                existing_meta.get("context_relevance", 0.0),
+                new_meta.get("context_relevance", 0.0)
+            ),
+            "description_quality": self._calculate_description_quality(merged_description)
+        }
+        
+        return {
+            "name": existing_entity["name"],
+            "category": category,
+            "description": merged_description,
+            "aliases": merged_aliases,
+            "metadata": merged_metadata
+        }
+
     def save_debug_output(self, data: Dict, doc_id: int, chunk_id: Optional[int] = None) -> None:
         """
         Save extracted knowledge to a JSON file for debugging.
@@ -170,40 +302,6 @@ class KnowledgeGraphGenerator:
         except Exception as e:
             logger.warning(f"Failed to save debug output: {str(e)}")
     
-    def merge_entity_info(self, existing_entity: Dict, new_entity: Dict) -> Dict:
-        """
-        Merge information from multiple occurrences of the same entity.
-        
-        Args:
-            existing_entity: Currently stored entity information
-            new_entity: New entity information to merge
-            
-        Returns:
-            Dict containing merged entity information
-        """
-        # Use the longer description
-        descriptions = [
-            existing_entity.get("description", ""),
-            new_entity.get("description", "")
-        ]
-        merged_description = max(descriptions, key=lambda x: len(x.strip()))
-        
-        # Merge and deduplicate aliases
-        merged_aliases = list(set(
-            existing_entity.get("aliases", []) + 
-            new_entity.get("aliases", [])
-        ))
-        
-        # Keep original category unless it's empty
-        category = existing_entity.get("category") or new_entity.get("category", "")
-        
-        return {
-            "name": existing_entity["name"],
-            "description": merged_description,
-            "aliases": merged_aliases,
-            "category": category
-        }
-
     def store_knowledge(self, knowledge: Dict, db: DatabaseConnection) -> None:
         """
         Store extracted knowledge in SingleStore.
