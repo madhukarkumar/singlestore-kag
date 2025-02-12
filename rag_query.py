@@ -100,7 +100,34 @@ class RAGQueryEngine:
     def text_search(self, db: DatabaseConnection, query: str, limit: int = 10) -> List[Dict]:
         """Perform full-text keyword search using Full-Text Search Version 2."""
         try:
-            formatted_query = f'content:("{query}")'
+            # Extract key phrases (quoted terms)
+            key_phrases = re.findall(r'"([^"]*)"', query)
+            remaining_text = re.sub(r'"[^"]*"', '', query)
+            
+            # Split remaining text into terms
+            terms = [t.strip() for t in remaining_text.split() if t.strip()]
+            
+            # Build search expression with semantic operators
+            search_parts = []
+            
+            # Add exact phrases with high weight
+            for phrase in key_phrases:
+                if phrase:
+                    search_parts.append(f'content:"\\"{phrase}\\"">>{self.search_config["exact_phrase_weight"]}')
+            
+            # Add individual terms with proximity search
+            if terms:
+                # Group terms with proximity operator
+                terms_str = ' '.join(terms)
+                search_parts.append(f'content:"{terms_str}"~{self.search_config["proximity_distance"]}')
+                
+                # Add individual terms with lower weight
+                for term in terms:
+                    if len(term) > 2:  # Skip very short terms
+                        search_parts.append(f'content:"{term}">>{self.search_config["single_term_weight"]}')
+            
+            # Combine all parts
+            formatted_query = ' '.join(search_parts)
             
             sql = """
                 SELECT 
@@ -167,13 +194,56 @@ class RAGQueryEngine:
         
         return sorted(doc_scores.values(), key=lambda d: d["combined_score"], reverse=True)
 
+    def preprocess_query(self, query: str) -> str:
+        """
+        Preprocess the query to improve search accuracy:
+        1. Remove special characters but keep important punctuation
+        2. Normalize whitespace
+        3. Extract key concepts and expand with synonyms
+        """
+        # Clean and normalize
+        query = re.sub(r'[^\w\s?.!,]', ' ', query)
+        query = ' '.join(query.split())
+        
+        # Extract key concepts using OpenAI
+        try:
+            response = self.openai_client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[{
+                    "role": "system",
+                    "content": "Extract and expand key concepts from the query. Format: concept1 | synonym1, synonym2 | concept2 | synonym1, synonym2"
+                }, {
+                    "role": "user",
+                    "content": query
+                }],
+                temperature=0.0
+            )
+            
+            # Parse expanded concepts
+            expanded = response.choices[0].message.content
+            expanded_terms = []
+            for concept_group in expanded.split('|'):
+                expanded_terms.extend(t.strip() for t in concept_group.split(','))
+            
+            # Combine original query with expanded terms
+            enhanced_query = f"{query} {' '.join(expanded_terms)}"
+            return enhanced_query.strip()
+            
+        except Exception as e:
+            logger.warning(f"Query expansion failed: {str(e)}")
+            return query
+
     def query(self, query_text: str, top_k: int = 5) -> SearchResponse:
         """Execute a hybrid search query combining vector and text search."""
         try:
+            # Preprocess and enhance query
+            enhanced_query = self.preprocess_query(query_text)
+            logger.info(f"Enhanced query: {enhanced_query}")
+            
             with DatabaseConnection() as db:
                 # Get results from both search methods
-                vector_results = self.vector_search(db, self.get_query_embedding(query_text), limit=top_k)
-                text_results = self.text_search(db, query_text, limit=top_k)
+                vector_results = self.vector_search(db, self.get_query_embedding(enhanced_query), limit=top_k)
+                text_results = self.text_search(db, enhanced_query, limit=top_k)
                 
                 # Merge results
                 merged_results = self.merge_search_results(vector_results, text_results)

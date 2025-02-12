@@ -71,8 +71,12 @@ knowledge_creation:
 retrieval:
   search:
     top_k: 10
-    vector_weight: 0.75
-    text_weight: 0.25
+    vector_weight: 0.7
+    text_weight: 0.3
+    exact_phrase_weight: 2.0  # Weight for exact phrase matches
+    single_term_weight: 1.0   # Weight for individual term matches
+    proximity_distance: 10    # Word distance for proximity search
+    min_score_threshold: 0.1  # Minimum score to include in results
     min_similarity_score: 0.4
     context_window_size: 2
     
