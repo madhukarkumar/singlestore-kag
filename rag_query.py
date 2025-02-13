@@ -175,6 +175,7 @@ class RAGQueryEngine:
             text_weight = 1 - vector_weight
             
             logger.info(f"Merging with weights - vector: {vector_weight}, text: {text_weight}")
+            logger.info(f"Input results - vector: {len(vector_results)}, text: {len(text_results)}")
             
             # Normalize scores
             vec_max = max([r.get('score', 0) for r in vector_results]) if vector_results else 1.0
@@ -196,7 +197,7 @@ class RAGQueryEngine:
             
             # Get all unique doc_ids
             all_doc_ids = set(vector_map.keys()) | set(text_map.keys())
-            logger.info(f"Total unique docs: {len(all_doc_ids)}")
+            logger.info(f"Total unique docs before merging: {len(all_doc_ids)}")
             
             # Combine scores
             merged = []
@@ -209,24 +210,22 @@ class RAGQueryEngine:
                     text_weight * text_result.get('text_score', 0)
                 )
                 
-                merged.append({
-                    'doc_id': doc_id,
-                    'content': vector_result.get('content') or text_result.get('content'),
-                    'vector_score': vector_result.get('vector_score', 0),
-                    'text_score': text_result.get('text_score', 0),
-                    'combined_score': combined_score
-                })
+                # Only include results that meet the minimum score threshold
+                min_score = self.search_config.get('min_score_threshold', 0.15)
+                if combined_score >= min_score:
+                    merged.append({
+                        'doc_id': doc_id,
+                        'content': vector_result.get('content') or text_result.get('content'),
+                        'vector_score': vector_result.get('vector_score', 0),
+                        'text_score': text_result.get('text_score', 0),
+                        'combined_score': combined_score
+                    })
             
             # Sort by combined score
             merged.sort(key=lambda x: x['combined_score'], reverse=True)
-            logger.info(f"Score range - min: {min([r['combined_score'] for r in merged] or [0])}, max: {max([r['combined_score'] for r in merged] or [0])}")
+            logger.info(f"Total results after merging and filtering: {len(merged)}")
             
-            # Filter by minimum score threshold
-            min_score = self.search_config.get('min_score_threshold', 0.0)
-            filtered = [r for r in merged if r['combined_score'] >= min_score]
-            logger.info(f"After filtering by min score {min_score}: {len(filtered)} results")
-            
-            return filtered
+            return merged
             
         except Exception as e:
             logger.error(f"Error merging results: {str(e)}")
@@ -294,20 +293,21 @@ class RAGQueryEngine:
                 merged_results = self.merge_search_results(vector_results, text_results)
                 logger.info(f"After merging: {len(merged_results)} results")
                 
-                if self.debug_output:
-                    self.save_debug_output("search_results", {
-                        "query": query_text,
-                        "results": merged_results
-                    })
+                # Sort by combined score and limit to top_k
+                merged_results.sort(key=lambda x: x['combined_score'], reverse=True)
+                merged_results = merged_results[:top_k]
+                logger.info(f"After limiting to top_k: {len(merged_results)} results")
                 
                 # Build context with SearchResult objects
                 formatted_results = []
                 for doc in merged_results:
                     # Get entities for this content
                     entities = self.get_entities_for_content(db, doc["content"])
+                    logger.info(f"Found {len(entities)} entities for doc {doc['doc_id']}")
                     
                     # Get relationships for these entities
                     relationships = self.get_relationships(db, [e.id for e in entities])
+                    logger.info(f"Found {len(relationships)} relationships for doc {doc['doc_id']}")
                     
                     # Create SearchResult object
                     search_result = SearchResult(
@@ -329,9 +329,7 @@ class RAGQueryEngine:
                     execution_time=0.0  # We'll set this in the API layer
                 )
                 
-                if self.debug_output:
-                    self.save_debug_output("query_context", response.dict())
-                
+                logger.info(f"Final response has {len(response.results)} results")
                 return response
                 
         except Exception as e:
