@@ -1,0 +1,3 @@
+1. When adding new functionalities make sure you read the Readme and Changelog first and make non-breaking changes.
+2. Never remove an existing functionality or change a database call unless explicitly asked.
+3. When adding or using a new SQL or database call, make sure you look at the existing working code in db.py and keep in mind that SingleStore does not support foreign keys and has a very specific syntax for MATCH. Make sure you follow these.
