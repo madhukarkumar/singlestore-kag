@@ -36,7 +36,7 @@ export default function SlideOutChat({ isOpen, onClose }: SlideOutChatProps) {
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-twisty-gray-200">
             <h2 className="text-twisty-xl font-twisty font-semibold text-twisty-secondary">
-              Knowledge Assistant Chat
+              Chat
             </h2>
             <button
               onClick={onClose}

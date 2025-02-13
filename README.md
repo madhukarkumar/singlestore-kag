@@ -1,4 +1,4 @@
-# SingleStore Knowledge Graph Search
+# SingleStore Prime Radian
 
 A full-stack application that processes documents to create semantic embeddings and knowledge graphs using OpenAI and Google's Gemini AI models. The system uses SingleStore for storing and querying vector embeddings, document content, and knowledge graph relationships.
 
@@ -35,6 +35,21 @@ A full-stack application that processes documents to create semantic embeddings 
 
 ## Version History
 
+### v2.0.0 (2025-02-13)
+- Complete UI redesign with modern aesthetics
+- New unified dashboard layout with statistics and search
+- Improved navigation with consistent header across pages
+- Dedicated knowledge base statistics page
+- Enhanced upload experience with real-time feedback
+- Streamlined search interface with better response display
+- Mobile-responsive design improvements
+
+### v1.2.0 (2025-02-11)
+- Improved semantic chunking with structured Gemini prompts
+- Enhanced document structure preservation
+- Better handling of feature lists and technical content
+- Improved search accuracy for technical queries
+
 ### v1.0.0 (2025-02-11)
 - Stable release with production-ready features
 - Optimized vector search using SingleStore session variables
@@ -42,29 +57,6 @@ A full-stack application that processes documents to create semantic embeddings 
 - Improved error handling and debugging capabilities
 - Comprehensive logging and error reporting
 - Added detailed changelog (see CHANGELOG.md)
-
-### v1.2 (2025-02-11)
-- Improved semantic chunking with structured Gemini prompts
-- Enhanced document structure preservation
-- Better handling of feature lists and technical content
-- Improved search accuracy for technical queries
-
-### v1.1 (2025-02-11)
-- Added reliable backend service management script
-- Fixed JSON parsing issue in entity aliases
-- Improved Pydantic model handling in RAG query engine
-- Enhanced error handling and debugging capabilities
-- Added support for both Pydantic v1 and v2 models
-- Improved service startup sequence with proper cleanup
-
-### v1.0 (Initial Release)
-- PDF and Markdown document processing
-- Semantic chunking with Gemini AI
-- Vector embeddings with OpenAI
-- Hybrid search implementation
-- Knowledge graph generation
-- Real-time progress tracking
-- Modern Next.js frontend
 
 ## Installation and Setup
 
@@ -237,6 +229,31 @@ The system uses a sophisticated document processing pipeline:
    - Entity relationship integration
    - Structured output with citations
    - Confidence scoring
+
+## Development Notes and Lessons Learned
+
+### Frontend Component Architecture
+
+1. **Graph Component Sizing**
+   - When using react-force-graph-2d, proper container sizing is crucial
+   - Always wrap the graph component in a parent div with fixed height
+   - Use h-full on the graph component to fill parent container
+   - Example structure:
+     ```tsx
+     // Parent component
+     <section className="bg-white rounded-lg p-6 shadow-md">
+       <h2>Knowledge Graph</h2>
+       <div className="h-[500px]">
+         <KnowledgeGraph />
+       </div>
+     </section>
+
+     // KnowledgeGraph component
+     <div className="relative w-full h-full">
+       <ForceGraph2D {...props} />
+     </div>
+     ```
+   - This prevents graph overflow and ensures proper containment
 
 ## Usage
 

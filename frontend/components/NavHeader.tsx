@@ -2,6 +2,7 @@
 
 import React, { useRef, useState } from "react";
 import { motion } from "framer-motion";
+import Link from "next/link";
 
 function NavHeader() {
   const [position, setPosition] = useState({
@@ -11,27 +12,35 @@ function NavHeader() {
   });
 
   return (
-    <ul
-      className="relative mx-auto flex w-fit rounded-full border-2 border-black bg-white p-1"
-      onMouseLeave={() => setPosition((pv) => ({ ...pv, opacity: 0 }))}
-    >
-      <Tab setPosition={setPosition}>Home</Tab>
-      <Tab setPosition={setPosition}>Pricing</Tab>
-      <Tab setPosition={setPosition}>About</Tab>
-      <Tab setPosition={setPosition}>Services</Tab>
-      <Tab setPosition={setPosition}>Contact</Tab>
+    <header className="bg-white border-b border-gray-200 px-6 py-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-gray-800">
+          SingleStore Prime Radian
+        </h1>
+        <ul
+          className="relative flex w-fit rounded-full border-2 border-black bg-white p-1"
+          onMouseLeave={() => setPosition((pv) => ({ ...pv, opacity: 0 }))}
+        >
+          <Tab href="/" setPosition={setPosition}>Home</Tab>
+          <Tab href="/kb" setPosition={setPosition}>Knowledge Base</Tab>
+          <Tab href="/kb/upload" setPosition={setPosition}>Upload</Tab>
+          <Tab href="/config" setPosition={setPosition}>Search Settings</Tab>
 
-      <Cursor position={position} />
-    </ul>
+          <Cursor position={position} />
+        </ul>
+      </div>
+    </header>
   );
 }
 
 const Tab = ({
   children,
   setPosition,
+  href,
 }: {
   children: React.ReactNode;
   setPosition: any;
+  href: string;
 }) => {
   const ref = useRef<HTMLLIElement>(null);
   return (
@@ -49,18 +58,23 @@ const Tab = ({
       }}
       className="relative z-10 block cursor-pointer px-3 py-1.5 text-xs uppercase text-white mix-blend-difference md:px-5 md:py-3 md:text-base"
     >
-      {children}
+      <Link href={href}>{children}</Link>
     </li>
   );
 };
 
-const Cursor = ({ position }: { position: any }) => {
+function Cursor({ position }: { position: any }) {
   return (
-    <motion.li
+    <motion.div
+      className="absolute inset-0 z-0 rounded-full bg-black"
       animate={position}
-      className="absolute z-0 h-7 rounded-full bg-black md:h-12"
+      transition={{
+        type: "spring",
+        stiffness: 350,
+        damping: 25,
+      }}
     />
   );
-};
+}
 
 export default NavHeader;
