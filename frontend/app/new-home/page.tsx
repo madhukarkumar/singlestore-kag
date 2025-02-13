@@ -85,16 +85,7 @@ export default function NewHomePage() {
 
   return (
     <div className="min-h-screen bg-twisty-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-twisty-gray-200 px-6 py-4">
-        <div className="flex flex-col space-y-4">
-          <h1 className="text-twisty-2xl font-twisty font-semibold text-twisty-secondary">
-            Knowledge Assistant
-          </h1>
-          <NavHeader />
-        </div>
-      </header>
-
+      <NavHeader />
       <div className="container mx-auto px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Left Column */}

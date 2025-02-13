@@ -12,18 +12,24 @@ function NavHeader() {
   });
 
   return (
-    <ul
-      className="relative mx-auto flex w-fit rounded-full border-2 border-black bg-white p-1"
-      onMouseLeave={() => setPosition((pv) => ({ ...pv, opacity: 0 }))}
-    >
-      <Tab href="/" setPosition={setPosition}>Home</Tab>
-      <Tab href="/new-home" setPosition={setPosition}>Knowledge Base</Tab>
-      <Tab href="/search" setPosition={setPosition}>Search</Tab>
-      <Tab href="/graph" setPosition={setPosition}>Graph</Tab>
-      <Tab href="/upload" setPosition={setPosition}>Upload</Tab>
+    <header className="bg-white border-b border-gray-200 px-6 py-4">
+      <div className="flex flex-col space-y-4">
+        <h1 className="text-2xl font-semibold text-gray-800">
+          SingleStore Prime Radian
+        </h1>
+        <ul
+          className="relative mx-auto flex w-fit rounded-full border-2 border-black bg-white p-1"
+          onMouseLeave={() => setPosition((pv) => ({ ...pv, opacity: 0 }))}
+        >
+          <Tab href="/" setPosition={setPosition}>Home</Tab>
+          <Tab href="/kb" setPosition={setPosition}>Knowledge Base</Tab>
+          <Tab href="/kb/upload" setPosition={setPosition}>Upload</Tab>
+          <Tab href="/config" setPosition={setPosition}>Search Settings</Tab>
 
-      <Cursor position={position} />
-    </ul>
+          <Cursor position={position} />
+        </ul>
+      </div>
+    </header>
   );
 }
 
