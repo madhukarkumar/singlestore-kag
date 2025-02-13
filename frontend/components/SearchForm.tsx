@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import StreamingText from './StreamingText';
 
 interface SearchResult {
   doc_id: number;
@@ -36,7 +35,6 @@ export default function SearchForm() {
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<SearchResponse | null>(null);
   const [isResponseVisible, setIsResponseVisible] = useState(false);
-  const [isAIResponseComplete, setIsAIResponseComplete] = useState(false);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,7 +43,6 @@ export default function SearchForm() {
     setLoading(true);
     setError(null);
     setIsResponseVisible(true);
-    setIsAIResponseComplete(false);
     setResponse(null);
 
     try {
@@ -144,12 +141,9 @@ export default function SearchForm() {
                 {response.generated_response && (
                   <div className="bg-twisty-gray-50 p-4 rounded-twisty-md">
                     <h3 className="font-semibold mb-2">AI Response</h3>
-                    <StreamingText
-                      text={response.generated_response}
-                      className="text-twisty-gray-700"
-                      speed={50}
-                      onComplete={() => setIsAIResponseComplete(true)}
-                    />
+                    <p className="text-twisty-gray-700">
+                      {response.generated_response}
+                    </p>
                   </div>
                 )}
                 
