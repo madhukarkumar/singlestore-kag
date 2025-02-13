@@ -127,3 +127,11 @@ ADD KEY (chunk_metadata_id) USING HASH;
 -- Create index on section_path
 ALTER TABLE Chunk_Metadata 
 ADD FULLTEXT USING VERSION 2 section_path_ft_idx (section_path);
+
+-- Drop the existing index first
+ALTER TABLE Document_Embeddings DROP INDEX embedding_vec_idx;
+
+-- Recreate the vector index with supported index options only
+ALTER TABLE Document_Embeddings 
+ADD VECTOR INDEX embedding_vec_idx (embedding)
+INDEX_OPTIONS '{"index_type": "HNSW_FLAT", "metric_type": "DOT_PRODUCT", "M": 32, "efConstruction": 200}';

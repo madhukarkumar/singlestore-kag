@@ -493,3 +493,14 @@ class RAGQueryEngine:
             
         except Exception as e:
             logger.warning(f"Failed to save debug output: {str(e)}")
+
+    def hybrid_search(self, db: DatabaseConnection, query: str, top_k: int = 5) -> List[Dict]:
+        # Add early exit conditions
+        vector_results = self.vector_search(db, self.get_query_embedding(query), limit=top_k*3)
+        if len(vector_results) >= top_k and \
+           vector_results[0]['score'] > 0.9:  # High confidence match
+            return vector_results[:top_k]
+        
+        # Otherwise proceed with hybrid
+        text_results = self.text_search(db, query, limit=top_k*2)
+        return self.merge_search_results(vector_results, text_results)
