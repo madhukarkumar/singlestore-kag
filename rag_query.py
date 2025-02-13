@@ -100,16 +100,49 @@ class RAGQueryEngine:
     def text_search(self, db: DatabaseConnection, query: str, limit: int = 10) -> List[Dict]:
         """Perform full-text keyword search using Full-Text Search Version 2."""
         try:
-            formatted_query = f'content:("{query}")'
+            # Extract key phrases (quoted terms)
+            key_phrases = re.findall(r'"([^"]*)"', query)
+            remaining_text = re.sub(r'"[^"]*"', '', query)
+            
+            # Split remaining text into terms
+            terms = [t.strip() for t in remaining_text.split() if t.strip()]
+            
+            # Build search expression with semantic operators
+            search_parts = []
+            
+            # Add exact phrases with high weight
+            for phrase in key_phrases:
+                if phrase:
+                    search_parts.append(f'content:"{phrase}">>{self.search_config["exact_phrase_weight"]}')
+            
+            # Add individual terms with proximity search
+            if terms:
+                # Group terms for proximity search
+                terms_str = ' '.join(terms)
+                search_parts.append(f'content:"{terms_str}"~{self.search_config["proximity_distance"]}')
+                
+                # Add individual terms with lower weight
+                for term in terms:
+                    if len(term) > 2:  # Skip very short terms
+                        search_parts.append(f'content:{term}>>{self.search_config["single_term_weight"]}')
+            
+            # Return empty results if no search terms found
+            if not search_parts:
+                logger.info("No valid search terms found, returning empty results")
+                return []
+            
+            # Combine all parts with OR
+            formatted_query = ' OR '.join(search_parts)
+            logger.info(f"Text search query: {formatted_query}")
             
             sql = """
                 SELECT 
                     doc_id,
                     content,
-                    MATCH(TABLE Document_Embeddings) AGAINST(%s) as score
+                    MATCH(TABLE Document_Embeddings) AGAINST(%s) as text_score
                 FROM Document_Embeddings 
                 WHERE MATCH(TABLE Document_Embeddings) AGAINST(%s)
-                ORDER BY score DESC
+                ORDER BY text_score DESC
                 LIMIT %s;
             """
             
@@ -123,75 +156,158 @@ class RAGQueryEngine:
                 }
                 for r in results
             ]
+            
         except Exception as e:
-            logger.error(f"Query execution failed: {str(e)}")
+            logger.error(f"Error in text search: {str(e)}")
             return []
 
     def merge_search_results(
-        self, 
-        vector_results: List[Dict], 
-        text_results: List[Dict],
-        vector_weight: float = 0.7
-    ) -> List[Dict]:
+            self, 
+            vector_results: List[Dict], 
+            text_results: List[Dict],
+            vector_weight: float = None
+        ) -> List[Dict]:
         """Merge and rank results from vector and text searches."""
-        # Normalize scores
-        vec_max = max([r["score"] for r in vector_results]) if vector_results else 1.0
-        txt_max = max([r["text_score"] for r in text_results]) if text_results else 1.0
-        
-        # Merge results
-        doc_scores = {}
-        for doc in vector_results:
-            doc_scores[doc["doc_id"]] = {
-                "doc_id": doc["doc_id"],
-                "content": doc["content"],
-                "vector_score": doc["score"],
-                "text_score": 0.0
-            }
+        try:
+            # Use config weight if not specified
+            if vector_weight is None:
+                vector_weight = self.search_config.get('vector_weight', 0.7)
+            text_weight = 1 - vector_weight
             
-        for doc in text_results:
-            if doc["doc_id"] in doc_scores:
-                doc_scores[doc["doc_id"]]["text_score"] = doc["text_score"]
-            else:
-                doc_scores[doc["doc_id"]] = {
-                    "doc_id": doc["doc_id"],
-                    "content": doc["content"],
-                    "vector_score": 0.0,
-                    "text_score": doc["text_score"]
-                }
+            logger.info(f"Merging with weights - vector: {vector_weight}, text: {text_weight}")
+            logger.info(f"Input results - vector: {len(vector_results)}, text: {len(text_results)}")
+            
+            # Normalize scores
+            vec_max = max([r.get('score', 0) for r in vector_results]) if vector_results else 1.0
+            txt_max = max([r.get('text_score', 0) for r in text_results]) if text_results else 1.0
+            logger.info(f"Max scores - vector: {vec_max}, text: {txt_max}")
+            
+            # Create a map of doc_id to result for both result sets
+            vector_map = {r['doc_id']: {
+                **r,
+                'vector_score': r.get('score', 0) / vec_max if vec_max else 0
+            } for r in vector_results}
+            
+            text_map = {r['doc_id']: {
+                **r,
+                'text_score': r.get('text_score', 0) / txt_max if txt_max else 0
+            } for r in text_results}
+            
+            logger.info(f"Unique docs - vector: {len(vector_map)}, text: {len(text_map)}")
+            
+            # Get all unique doc_ids
+            all_doc_ids = set(vector_map.keys()) | set(text_map.keys())
+            logger.info(f"Total unique docs before merging: {len(all_doc_ids)}")
+            
+            # Combine scores
+            merged = []
+            for doc_id in all_doc_ids:
+                vector_result = vector_map.get(doc_id, {'vector_score': 0})
+                text_result = text_map.get(doc_id, {'text_score': 0})
+                
+                combined_score = (
+                    vector_weight * vector_result.get('vector_score', 0) +
+                    text_weight * text_result.get('text_score', 0)
+                )
+                
+                # Only include results that meet the minimum score threshold
+                min_score = self.search_config.get('min_score_threshold', 0.15)
+                if combined_score >= min_score:
+                    merged.append({
+                        'doc_id': doc_id,
+                        'content': vector_result.get('content') or text_result.get('content'),
+                        'vector_score': vector_result.get('vector_score', 0),
+                        'text_score': text_result.get('text_score', 0),
+                        'combined_score': combined_score
+                    })
+            
+            # Sort by combined score
+            merged.sort(key=lambda x: x['combined_score'], reverse=True)
+            logger.info(f"Total results after merging and filtering: {len(merged)}")
+            
+            return merged
+            
+        except Exception as e:
+            logger.error(f"Error merging results: {str(e)}")
+            raise
+
+    def preprocess_query(self, query: str) -> str:
+        """
+        Preprocess the query to improve search accuracy:
+        1. Remove special characters but keep important punctuation
+        2. Normalize whitespace
+        3. Extract key concepts and expand with synonyms
+        """
+        # Clean and normalize
+        query = re.sub(r'[^\w\s?.!,]', ' ', query)
+        query = ' '.join(query.split())
         
-        # Compute combined scores
-        for doc in doc_scores.values():
-            v_norm = (doc["vector_score"] / vec_max) if vec_max else 0.0
-            t_norm = (doc["text_score"] / txt_max) if txt_max else 0.0
-            doc["combined_score"] = vector_weight * v_norm + (1 - vector_weight) * t_norm
-        
-        return sorted(doc_scores.values(), key=lambda d: d["combined_score"], reverse=True)
+        # Extract key concepts using OpenAI
+        try:
+            model = os.getenv("QUERY_EXPANSION_MODEL", "gpt-3.5-turbo")  # Default to gpt-3.5-turbo if not set
+            response = self.openai_client.chat.completions.create(
+                model=model,
+                messages=[{
+                    "role": "system",
+                    "content": "Extract and expand key concepts from the query. Format: concept1 | synonym1, synonym2 | concept2 | synonym1, synonym2"
+                }, {
+                    "role": "user",
+                    "content": query
+                }],
+                temperature=0.0
+            )
+            
+            # Parse expanded concepts
+            expanded = response.choices[0].message.content
+            expanded_terms = []
+            for concept_group in expanded.split('|'):
+                expanded_terms.extend(t.strip() for t in concept_group.split(','))
+            
+            # Combine original query with expanded terms
+            enhanced_query = f"{query} {' '.join(expanded_terms)}"
+            return enhanced_query.strip()
+            
+        except Exception as e:
+            logger.warning(f"Query expansion failed: {str(e)}")
+            return query
 
     def query(self, query_text: str, top_k: int = 5) -> SearchResponse:
         """Execute a hybrid search query combining vector and text search."""
         try:
+            # Preprocess and enhance query
+            enhanced_query = self.preprocess_query(query_text)
+            logger.info(f"Enhanced query: {enhanced_query}")
+            
             with DatabaseConnection() as db:
                 # Get results from both search methods
-                vector_results = self.vector_search(db, self.get_query_embedding(query_text), limit=top_k)
-                text_results = self.text_search(db, query_text, limit=top_k)
+                config_top_k = self.search_config.get('top_k', 20)  # Use config value, default to 20
+                logger.info(f"Using config top_k: {config_top_k}")
+                
+                vector_results = self.vector_search(db, self.get_query_embedding(enhanced_query), limit=config_top_k)
+                logger.info(f"Vector search returned {len(vector_results)} results")
+                
+                text_results = self.text_search(db, enhanced_query, limit=config_top_k)
+                logger.info(f"Text search returned {len(text_results)} results")
                 
                 # Merge results
                 merged_results = self.merge_search_results(vector_results, text_results)
+                logger.info(f"After merging: {len(merged_results)} results")
                 
-                if self.debug_output:
-                    self.save_debug_output("search_results", {
-                        "query": query_text,
-                        "results": merged_results
-                    })
+                # Sort by combined score and limit to top_k
+                merged_results.sort(key=lambda x: x['combined_score'], reverse=True)
+                merged_results = merged_results[:top_k]
+                logger.info(f"After limiting to top_k: {len(merged_results)} results")
                 
                 # Build context with SearchResult objects
                 formatted_results = []
                 for doc in merged_results:
                     # Get entities for this content
                     entities = self.get_entities_for_content(db, doc["content"])
+                    logger.info(f"Found {len(entities)} entities for doc {doc['doc_id']}")
                     
                     # Get relationships for these entities
                     relationships = self.get_relationships(db, [e.id for e in entities])
+                    logger.info(f"Found {len(relationships)} relationships for doc {doc['doc_id']}")
                     
                     # Create SearchResult object
                     search_result = SearchResult(
@@ -213,9 +329,7 @@ class RAGQueryEngine:
                     execution_time=0.0  # We'll set this in the API layer
                 )
                 
-                if self.debug_output:
-                    self.save_debug_output("query_context", response.dict())
-                
+                logger.info(f"Final response has {len(response.results)} results")
                 return response
                 
         except Exception as e:
@@ -231,9 +345,12 @@ class RAGQueryEngine:
         try:
             prompt = self._build_prompt(query, context)
             
+            # Get model from env or config
+            model = os.getenv("RESPONSE_GENERATION_MODEL") or self.response_config.get('model', 'gpt-3.5-turbo')
+            
             # Create API parameters
             api_params = {
-                "model": self.response_config.get('model', 'o3-mini'),
+                "model": model,
                 "messages": [
                     {"role": "system", "content": "You are a helpful assistant that answers questions based on the provided context."},
                     {"role": "user", "content": prompt}
@@ -241,7 +358,7 @@ class RAGQueryEngine:
             }
             
             # Add model-specific parameters
-            if 'o3-' in api_params["model"]:
+            if 'o3-' in model:
                 api_params["max_completion_tokens"] = self.response_config['max_tokens']
             else:
                 api_params["max_tokens"] = self.response_config['max_tokens']
@@ -376,3 +493,14 @@ class RAGQueryEngine:
             
         except Exception as e:
             logger.warning(f"Failed to save debug output: {str(e)}")
+
+    def hybrid_search(self, db: DatabaseConnection, query: str, top_k: int = 5) -> List[Dict]:
+        # Add early exit conditions
+        vector_results = self.vector_search(db, self.get_query_embedding(query), limit=top_k*3)
+        if len(vector_results) >= top_k and \
+           vector_results[0]['score'] > 0.9:  # High confidence match
+            return vector_results[:top_k]
+        
+        # Otherwise proceed with hybrid
+        text_results = self.text_search(db, query, limit=top_k*2)
+        return self.merge_search_results(vector_results, text_results)

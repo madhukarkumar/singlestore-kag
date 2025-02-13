@@ -13,6 +13,7 @@ import google.generativeai as genai
 from google.generativeai.types import GenerateContentResponse
 import re
 from config_loader import config
+import numpy as np
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -480,19 +481,9 @@ def process_pdf(doc_id: int, task=None):
                 embedding = response.data[0].embedding
                 
                 # Store chunk and embedding
-                query = """
-                    INSERT INTO Document_Embeddings 
-                    (doc_id, content, embedding, chunk_metadata_id)
-                    VALUES (%s, %s, JSON_ARRAY_PACK(%s), %s)
-                """
                 conn.execute_query(
-                    query,
-                    (
-                        doc_id,
-                        chunk["content"],
-                        json.dumps(embedding),
-                        chunk_metadata_id
-                    )
+                    "INSERT INTO Document_Embeddings (embedding) VALUES (JSON_ARRAY_PACK_F16(%s))",
+                    (np.array(embedding).astype(np.float16).tobytes(),)
                 )
             
             # Extract and store knowledge

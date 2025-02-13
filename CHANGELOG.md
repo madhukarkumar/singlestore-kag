@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0] - 2025-02-12
+
+### Fixed
+- Fixed Full-Text Search Version 2 query format:
+  - Updated MATCH syntax to use `MATCH(TABLE table_name)` instead of column names
+  - Added field specification in query strings (e.g., `content:term`)
+  - Added proximity search support for multi-term queries
+  - Properly formatted weight boosting with `>>` operator
+
+### Added
+- Added proximity search for multi-term queries to improve text search relevance
+- Added comprehensive logging for search query construction and results
+
 ## [1.0.0] - 2025-02-11 21:37 PST
 
 ### Added
@@ -48,3 +61,20 @@
   - OpenAI API for embeddings
   - SingleStore for vector and text search
   - FastAPI for REST endpoints
+
+## [0.2.1] - 2025-02-12
+
+### Added
+- New configuration management page at `/config`
+- API endpoints for retrieving and updating configuration settings
+- Dynamic configuration for chunking, entity extraction, search, and response generation parameters
+
+### Fixed
+- Bug in graph visualization where nodes would reset position on mouse leave
+- Fixed node sizes in graph visualization to be consistent (8px diameter)
+
+### Changed
+- Improved code organization by cleaning up configuration handling
+- Updated API documentation to include configuration endpoints
+
+## [0.2.0] - 2025-02-11
