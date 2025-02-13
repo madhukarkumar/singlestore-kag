@@ -31,168 +31,146 @@ interface SearchResponse {
 
 export default function SearchForm() {
   const [query, setQuery] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [response, setResponse] = useState<SearchResponse | null>(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [response, setResponse] = useState<SearchResponse | null>(null);
+  const [isResponseVisible, setIsResponseVisible] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    if (!query.trim()) return;
+
+    setLoading(true);
     setError(null);
+    setIsResponseVisible(true);
 
     try {
-      const res = await fetch('http://localhost:8000/kag-search', {
+      const response = await fetch('http://localhost:8000/kag-search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          query,
-          top_k: 20,
-          debug: false,
+          query: query.trim(),
+          top_k: 5,
         }),
       });
 
-      if (!res.ok) {
-        throw new Error(`Search failed: ${res.statusText}`);
+      if (!response.ok) {
+        throw new Error('Search failed');
       }
 
-      const data: SearchResponse = await res.json();
+      const data: SearchResponse = await response.json();
       setResponse(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <form onSubmit={handleSubmit} className="mb-8">
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Enter your search query..."
-            className="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-lg"
-            required
-          />
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-blue-300 text-lg font-medium transition-colors"
-          >
-            {isLoading ? 'Searching...' : 'Search'}
-          </button>
-        </div>
+    <div className="relative">
+      {/* Search Form */}
+      <form onSubmit={handleSearch} className="flex gap-2">
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Ask a question..."
+          className="flex-1 px-4 py-2 rounded-twisty-md border border-twisty-gray-200 
+                   focus:outline-none focus:ring-2 focus:ring-twisty-primary/20 
+                   focus:border-twisty-primary"
+        />
+        <button
+          type="submit"
+          disabled={loading}
+          className="px-4 py-2 bg-twisty-primary text-white rounded-twisty-md
+                   hover:bg-twisty-primary/90 transition-colors disabled:opacity-50"
+        >
+          Search
+        </button>
       </form>
 
-      {error && (
-        <div className="p-4 mb-6 text-red-700 bg-red-100 rounded-lg border border-red-200">
-          <p className="font-medium">Error</p>
-          <p>{error}</p>
-        </div>
-      )}
-
-      {response && (
-        <div className="space-y-8">
-          {/* AI Generated Response */}
-          {response.generated_response && (
-            <div className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
-              <h3 className="text-lg font-semibold mb-3 text-blue-900">AI Response</h3>
-              <p className="text-gray-800 leading-relaxed whitespace-pre-line">
-                {response.generated_response.split('. ').join('.\n\n')}
-              </p>
-            </div>
-          )}
-
-          {/* Search Results */}
-          <div className="space-y-6">
-            <h3 className="text-xl font-semibold text-gray-900 border-b pb-2">
+      {/* Slide-out Response Panel */}
+      <div
+        className={`fixed right-0 top-0 h-full w-full max-w-2xl bg-white shadow-twisty-lg 
+          transform transition-transform duration-300 ease-in-out z-50
+          ${isResponseVisible ? 'translate-x-0' : 'translate-x-full'}`}
+      >
+        <div className="h-full flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-twisty-gray-200">
+            <h2 className="text-twisty-xl font-twisty font-semibold text-twisty-secondary">
               Search Results
-            </h3>
-            <div className="space-y-8">
-              {response.results.map((result, index) => (
-                <div
-                  key={`${result.doc_id}-${index}`}
-                  className="p-6 bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow divide-y divide-gray-100"
-                >
-                  {/* Relevance Scores */}
-                  <div className="flex flex-wrap gap-4 mb-4">
-                    {[
-                      {
-                        label: 'Vector Score',
-                        value: result.vector_score,
-                        className: 'bg-blue-50 text-blue-700'
-                      },
-                      {
-                        label: 'Text Score',
-                        value: result.text_score,
-                        className: 'bg-green-50 text-green-700'
-                      },
-                      {
-                        label: 'Combined Score',
-                        value: result.combined_score,
-                        className: 'bg-purple-50 text-purple-700'
-                      }
-                    ].map((score, idx) => (
-                      <div
-                        key={`${result.doc_id}-score-${idx}`}
-                        className={`px-3 py-1.5 rounded-full text-sm font-medium ${score.className}`}
-                      >
-                        {score.label}: {score.value.toFixed(3)}
+            </h2>
+            <button
+              onClick={() => setIsResponseVisible(false)}
+              className="p-2 text-twisty-gray-500 hover:text-twisty-gray-700 rounded-full 
+                hover:bg-twisty-gray-100 transition-colors"
+            >
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
+
+          {/* Response Content */}
+          <div className="flex-1 overflow-y-auto p-6">
+            {loading ? (
+              <div className="flex justify-center items-center h-full">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-twisty-primary" />
+              </div>
+            ) : error ? (
+              <div className="text-twisty-error p-4 rounded-twisty-md bg-twisty-error/10">
+                {error}
+              </div>
+            ) : response ? (
+              <div className="space-y-6">
+                {response.generated_response && (
+                  <div className="bg-twisty-gray-50 p-4 rounded-twisty-md">
+                    <h3 className="font-semibold mb-2">AI Response</h3>
+                    <p className="text-twisty-gray-700">{response.generated_response}</p>
+                  </div>
+                )}
+                
+                {response.results.map((result, index) => (
+                  <div key={index} className="border border-twisty-gray-200 rounded-twisty-md p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="text-sm text-twisty-gray-500">
+                        Document ID: {result.doc_id}
                       </div>
-                    ))}
-                  </div>
-
-                  {/* Content */}
-                  <div className="py-4">
-                    <h4 className="text-sm font-semibold text-gray-700 mb-3">
-                      Document Content
-                    </h4>
-                    <p className="text-gray-800 leading-relaxed whitespace-pre-line">
-                      {result.content
-                        .split('. ')
-                        .map((sentence, idx) => sentence.trim())
-                        .filter(sentence => sentence.length > 0)
-                        .map((sentence, idx) => (
-                          <span key={`${result.doc_id}-sentence-${idx}`}>
-                            {sentence}.{'\n\n'}
-                          </span>
-                        ))}
-                    </p>
-                  </div>
-
-                  {/* Entities */}
-                  {result.entities.length > 0 && (
-                    <div className="pt-4" key={`entities-${result.doc_id}`}>
-                      <h4 className="text-sm font-semibold text-gray-700 mb-3">
-                        Entities Found
-                      </h4>
-                      <div className="flex flex-wrap gap-2">
-                        {result.entities.map((entity) => (
-                          <div
-                            key={`${result.doc_id}-entity-${entity.entity_id}`}
-                            className="px-3 py-1.5 bg-gray-50 rounded-full text-sm text-gray-700 flex items-center gap-1.5 border border-gray-200"
-                          >
-                            <span className="font-medium">{entity.name}</span>
-                            <span className="text-gray-500 text-xs">({entity.category})</span>
-                          </div>
-                        ))}
+                      <div className="text-sm">
+                        <span className="text-twisty-primary">
+                          Score: {(result.combined_score * 100).toFixed(1)}%
+                        </span>
                       </div>
                     </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Execution Time */}
-          <div className="text-sm text-gray-500 text-right">
-            Query executed in {response.execution_time.toFixed(3)} seconds
+                    <p className="text-twisty-gray-700">{result.content}</p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         </div>
+      </div>
+
+      {/* Backdrop */}
+      {isResponseVisible && (
+        <div
+          className="fixed inset-0 bg-black/20 transition-opacity duration-300 z-40"
+          onClick={() => setIsResponseVisible(false)}
+        />
       )}
     </div>
   );
