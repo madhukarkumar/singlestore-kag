@@ -131,6 +131,71 @@ export default function HomePage() {
               )}
             </section>
 
+            {/* Documents Section */}
+            <section className="bg-white rounded-twisty-lg p-6 shadow-twisty-md">
+              <h2 className="text-twisty-xl font-twisty font-semibold text-twisty-secondary mb-6">
+                Documents
+              </h2>
+              {loading ? (
+                <div className="flex justify-center">
+                  <Spinner />
+                </div>
+              ) : error ? (
+                <div className="text-twisty-error">{error}</div>
+              ) : data && data.documents ? (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-twisty-gray-50">
+                      <tr>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-twisty-gray-500 uppercase tracking-wider">
+                          Title
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-twisty-gray-500 uppercase tracking-wider">
+                          Type
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-twisty-gray-500 uppercase tracking-wider">
+                          Chunks
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-twisty-gray-500 uppercase tracking-wider">
+                          Entities
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-twisty-gray-500 uppercase tracking-wider">
+                          Relationships
+                        </th>
+                        <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-twisty-gray-500 uppercase tracking-wider">
+                          Created
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {data.documents.map((doc) => (
+                        <tr key={doc.doc_id}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-twisty-gray-900">
+                            {doc.title}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-twisty-gray-500">
+                            {doc.file_type}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-twisty-gray-500">
+                            {doc.total_chunks}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-twisty-gray-500">
+                            {doc.total_entities}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-twisty-gray-500">
+                            {doc.total_relationships}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-twisty-gray-500">
+                            {new Date(doc.created_at).toLocaleDateString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+            </section>
+
             {/* Upload Section */}
             <section className="bg-white rounded-twisty-lg p-6 shadow-twisty-md">
               <h2 className="text-twisty-xl font-twisty font-semibold text-twisty-secondary mb-6">
