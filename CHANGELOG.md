@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.0] - 2025-02-12
+
+### Fixed
+- Fixed Full-Text Search Version 2 query format:
+  - Updated MATCH syntax to use `MATCH(TABLE table_name)` instead of column names
+  - Added field specification in query strings (e.g., `content:term`)
+  - Added proximity search support for multi-term queries
+  - Properly formatted weight boosting with `>>` operator
+
+### Added
+- Added proximity search for multi-term queries to improve text search relevance
+- Added comprehensive logging for search query construction and results
+
 ## [1.0.0] - 2025-02-11 21:37 PST
 
 ### Added

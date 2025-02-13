@@ -48,7 +48,7 @@ export default function SearchForm() {
         },
         body: JSON.stringify({
           query,
-          top_k: 5,
+          top_k: 20,
           debug: false,
         }),
       });
