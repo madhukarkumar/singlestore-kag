@@ -158,7 +158,19 @@ async def get_task_status(task_id: str):
         
         # Get task state and info
         state = task.state
-        info = task.info or {}
+        info = {}
+        
+        if state == "SUCCESS":
+            info = task.result if isinstance(task.result, dict) else {}
+        elif state == "FAILURE":
+            # Handle database errors specifically
+            error = str(task.result)
+            if "OperationalError" in error:
+                info = {"error": error}
+            else:
+                info = {"error": str(task.result)}
+        else:
+            info = task.info if isinstance(task.info, dict) else {}
         
         # Build response based on state
         response = {
@@ -171,7 +183,7 @@ async def get_task_status(task_id: str):
         
         # Add error info if failed
         if state == "FAILURE":
-            response["error"] = str(task.result)
+            response["error"] = info.get("error", str(task.result))
             
         return response
         

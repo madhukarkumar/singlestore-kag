@@ -1,5 +1,6 @@
 import os
 import fitz  # PyMuPDF
+import json
 from datetime import datetime
 from typing import Optional, Tuple, List, Dict, Any
 from pathlib import Path
@@ -53,12 +54,16 @@ def validate_pdf(file_path: str) -> Tuple[bool, Optional[str]]:
 
 def save_pdf(file_data: bytes, filename: str) -> str:
     """Save PDF file to documents directory"""
-    safe_filename = "".join(c for c in filename if c.isalnum() or c in "._- ")
-    file_path = DOCUMENTS_DIR / safe_filename
+    base_filename = "".join(c for c in filename if c.isalnum() or c in "._- ")
+    name, ext = os.path.splitext(base_filename)
+    file_path = DOCUMENTS_DIR / base_filename
+    counter = 1
     
-    # Check if file exists
-    if file_path.exists():
-        raise PDFProcessingError("A file with this name already exists")
+    # If file exists, append a number to the filename
+    while file_path.exists():
+        new_filename = f"{name}_{counter}{ext}"
+        file_path = DOCUMENTS_DIR / new_filename
+        counter += 1
     
     with open(file_path, "wb") as f:
         f.write(file_data)
@@ -482,8 +487,11 @@ def process_pdf(doc_id: int, task=None):
                 
                 # Store chunk and embedding
                 conn.execute_query(
-                    "INSERT INTO Document_Embeddings (embedding) VALUES (JSON_ARRAY_PACK_F16(%s))",
-                    (np.array(embedding).astype(np.float16).tobytes(),)
+                    """
+                    INSERT INTO Document_Embeddings (doc_id, content, embedding) 
+                    VALUES (%s, %s, JSON_ARRAY_PACK(%s))
+                    """,
+                    (doc_id, chunk['content'], json.dumps(embedding))
                 )
             
             # Extract and store knowledge
