@@ -5,6 +5,7 @@ import { Spinner } from '../../components/Spinner';
 import KnowledgeGraph from '../../components/KnowledgeGraph';
 import SearchForm from '../../components/SearchForm';
 import { ProcessingStatus } from '../../components/ProcessingStatus';
+import NavHeader from '../../components/NavHeader';
 
 interface DocumentStats {
   doc_id: number;
@@ -86,9 +87,12 @@ export default function NewHomePage() {
     <div className="min-h-screen bg-twisty-gray-50">
       {/* Header */}
       <header className="bg-white border-b border-twisty-gray-200 px-6 py-4">
-        <h1 className="text-twisty-2xl font-twisty font-semibold text-twisty-secondary">
-          Knowledge Assistant
-        </h1>
+        <div className="flex flex-col space-y-4">
+          <h1 className="text-twisty-2xl font-twisty font-semibold text-twisty-secondary">
+            Knowledge Assistant
+          </h1>
+          <NavHeader />
+        </div>
       </header>
 
       <div className="container mx-auto px-4 py-8">
@@ -172,11 +176,11 @@ export default function NewHomePage() {
             </section>
 
             {/* Knowledge Graph Section */}
-            <section className="bg-white rounded-twisty-lg p-6 shadow-twisty-md">
-              <h2 className="text-twisty-xl font-twisty font-semibold text-twisty-secondary mb-6">
+            <section className="bg-white rounded-lg p-6 shadow-md">
+              <h2 className="text-xl font-semibold text-gray-800 mb-4">
                 Knowledge Graph
               </h2>
-              <div className="h-[500px] relative">
+              <div className="h-[500px]">
                 <KnowledgeGraph />
               </div>
             </section>

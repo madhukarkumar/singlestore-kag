@@ -4,11 +4,14 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { Spinner } from '@/components/Spinner';
 
-// Dynamically import ForceGraph to avoid SSR issues
-const ForceGraph2D = dynamic(() => import('react-force-graph').then(mod => mod.ForceGraph2D), {
-  ssr: false,
-  loading: () => <Spinner />
-});
+// Dynamically import ForceGraph2D directly
+const ForceGraph2D = dynamic(
+  () => import('react-force-graph-2d'),
+  {
+    ssr: false,
+    loading: () => <Spinner />
+  }
+);
 
 interface GraphNode {
   id: string;
@@ -61,14 +64,16 @@ export default function KnowledgeGraph() {
     '#db2777', // pink-600
   ];
 
-  // Center graph on mount and data load
   useEffect(() => {
     if (graphRef.current && graphData) {
-      // Wait a bit for the graph to stabilize
-      setTimeout(() => {
-        graphRef.current.zoomToFit(400, 50);
-        graphRef.current.centerAt(0, 0, 1000);
-      }, 500);
+      // Center the graph
+      graphRef.current.centerAt(0, 0);
+      graphRef.current.zoom(1.5);
+
+      // Configure forces
+      graphRef.current.d3Force('charge').strength(-100);
+      graphRef.current.d3Force('center').strength(1);
+      graphRef.current.d3Force('link').distance(50);
     }
   }, [graphData]);
 
@@ -165,80 +170,92 @@ export default function KnowledgeGraph() {
   }, []);
 
   return (
-    <div ref={containerRef} className="relative w-full h-full flex items-center justify-center overflow-hidden">
-      {loading ? (
+    <div ref={containerRef} className="relative w-full h-full">
+      {loading && (
         <div className="absolute inset-0 flex items-center justify-center">
           <Spinner />
         </div>
-      ) : error ? (
+      )}
+      {error && (
         <div className="text-red-600">{error}</div>
-      ) : (
-        <ForceGraph2D
-          ref={graphRef}
-          graphData={processedData}
-          nodeLabel="name"
-          nodeColor={node => {
-            const color = categoryColors[
-              Array.from(new Set(graphData.nodes.map(n => n.category)))
-                .indexOf(node.category) % categoryColors.length
-            ];
-            return selectedNode ? 
-              (selectedNode.id === node.id ? color : `${color}66`) : 
-              color;
-          }}
-          nodeVal={node => node.val * (selectedNode?.id === node.id ? 1.5 : 1)}
-          linkSource="source"
-          linkTarget="target"
-          linkLabel={link => link.type}
-          linkColor={() => '#4f46e5'}
-          linkWidth={2}
-          linkDirectionalParticles={4}
-          linkDirectionalParticleWidth={2}
-          linkDirectionalParticleSpeed={0.005}
-          linkDirectionalParticleColor={() => '#4f46e5'}
-          linkCurvature={0.1}
-          cooldownTicks={100}
-          onNodeClick={handleNodeClick}
-          nodeCanvasObject={(node, ctx, globalScale) => {
-            const label = node.name;
-            const fontSize = 12/globalScale;
-            const nodeColor = categoryColors[
-              Array.from(new Set(graphData.nodes.map(n => n.category)))
-                .indexOf(node.category) % categoryColors.length
-            ];
-            
-            // Draw circle
-            ctx.beginPath();
-            ctx.fillStyle = nodeColor;
-            const size = 4 / globalScale;  // Fixed 4px radius (8px diameter)
-            ctx.arc(node.x, node.y, size, 0, 2 * Math.PI);
-            ctx.fill();
-            
-            // Draw label
-            ctx.font = `${fontSize}px Inter, system-ui, -apple-system, sans-serif`;
-            const textWidth = ctx.measureText(label).width;
-            const bckgDimensions = [textWidth, fontSize].map(n => n + fontSize * 0.2);
+      )}
+      {graphData && !error && (
+        <div className="absolute inset-0">
+          <ForceGraph2D
+            ref={graphRef}
+            graphData={processedData}
+            width={containerRef.current?.clientWidth}
+            height={containerRef.current?.clientHeight}
+            nodeLabel="name"
+            nodeColor={node => {
+              const color = categoryColors[
+                Array.from(new Set(graphData.nodes.map(n => n.category)))
+                  .indexOf(node.category) % categoryColors.length
+              ];
+              return selectedNode ? 
+                (selectedNode.id === node.id ? color : `${color}66`) : 
+                color;
+            }}
+            nodeVal={node => node.val * (selectedNode?.id === node.id ? 1.5 : 1)}
+            linkSource="source"
+            linkTarget="target"
+            linkLabel={link => link.type}
+            linkColor={() => '#4f46e5'}
+            linkWidth={2}
+            linkDirectionalParticles={4}
+            linkDirectionalParticleWidth={2}
+            linkDirectionalParticleSpeed={0.005}
+            linkDirectionalParticleColor={() => '#4f46e5'}
+            linkCurvature={0.1}
+            cooldownTicks={100}
+            d3VelocityDecay={0.3}
+            onNodeClick={handleNodeClick}
+            minZoom={0.5}
+            maxZoom={4}
+            onEngineStop={() => {
+              if (graphRef.current) {
+                graphRef.current.zoomToFit(400, 50);
+              }
+            }}
+            nodeCanvasObject={(node, ctx, globalScale) => {
+              const label = node.name;
+              const fontSize = 12/globalScale;
+              const nodeColor = categoryColors[
+                Array.from(new Set(graphData.nodes.map(n => n.category)))
+                  .indexOf(node.category) % categoryColors.length
+              ];
+              
+              // Draw circle
+              ctx.beginPath();
+              ctx.fillStyle = nodeColor;
+              const size = 4 / globalScale;  // Fixed 4px radius (8px diameter)
+              ctx.arc(node.x, node.y, size, 0, 2 * Math.PI);
+              ctx.fill();
+              
+              // Draw label
+              ctx.font = `${fontSize}px Inter, system-ui, -apple-system, sans-serif`;
+              const textWidth = ctx.measureText(label).width;
+              const bckgDimensions = [textWidth, fontSize].map(n => n + fontSize * 0.2);
 
-            // Position label below the circle
-            const labelY = node.y + size + fontSize/2;
-            
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-            ctx.fillRect(
-              node.x - bckgDimensions[0] / 2,
-              labelY - bckgDimensions[1] / 2,
-              ...bckgDimensions
-            );
+              // Position label below the circle
+              const labelY = node.y + size + fontSize/2;
+              
+              ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+              ctx.fillRect(
+                node.x - bckgDimensions[0] / 2,
+                labelY - bckgDimensions[1] / 2,
+                ...bckgDimensions
+              );
 
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillStyle = selectedNode && selectedNode.id !== node.id ? 
-              '#666' : 
-              nodeColor;
-            ctx.fillText(label, node.x, labelY);
-          }}
-          width={containerRef.current?.clientWidth || 800}
-          height={containerRef.current?.clientHeight || 500}
-        />
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillStyle = selectedNode && selectedNode.id !== node.id ? 
+                '#666' : 
+                nodeColor;
+              ctx.fillText(label, node.x, labelY);
+            }}
+          />
+        </div>
       )}
     </div>
   );

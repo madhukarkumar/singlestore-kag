@@ -9,10 +9,11 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "framer-motion": "^12.4.2",
     "next": "15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-force-graph": "^1.46.0",
+    "react-force-graph-2d": "^1.25.3",
     "spinner": "^0.3.4"
   },
   "devDependencies": {

@@ -238,6 +238,31 @@ The system uses a sophisticated document processing pipeline:
    - Structured output with citations
    - Confidence scoring
 
+## Development Notes and Lessons Learned
+
+### Frontend Component Architecture
+
+1. **Graph Component Sizing**
+   - When using react-force-graph-2d, proper container sizing is crucial
+   - Always wrap the graph component in a parent div with fixed height
+   - Use h-full on the graph component to fill parent container
+   - Example structure:
+     ```tsx
+     // Parent component
+     <section className="bg-white rounded-lg p-6 shadow-md">
+       <h2>Knowledge Graph</h2>
+       <div className="h-[500px]">
+         <KnowledgeGraph />
+       </div>
+     </section>
+
+     // KnowledgeGraph component
+     <div className="relative w-full h-full">
+       <ForceGraph2D {...props} />
+     </div>
+     ```
+   - This prevents graph overflow and ensures proper containment
+
 ## Usage
 
 ### Document Processing

@@ -2,6 +2,7 @@
 
 import React, { useRef, useState } from "react";
 import { motion } from "framer-motion";
+import Link from "next/link";
 
 function NavHeader() {
   const [position, setPosition] = useState({
@@ -15,11 +16,11 @@ function NavHeader() {
       className="relative mx-auto flex w-fit rounded-full border-2 border-black bg-white p-1"
       onMouseLeave={() => setPosition((pv) => ({ ...pv, opacity: 0 }))}
     >
-      <Tab setPosition={setPosition}>Home</Tab>
-      <Tab setPosition={setPosition}>Pricing</Tab>
-      <Tab setPosition={setPosition}>About</Tab>
-      <Tab setPosition={setPosition}>Services</Tab>
-      <Tab setPosition={setPosition}>Contact</Tab>
+      <Tab href="/" setPosition={setPosition}>Home</Tab>
+      <Tab href="/new-home" setPosition={setPosition}>Knowledge Base</Tab>
+      <Tab href="/search" setPosition={setPosition}>Search</Tab>
+      <Tab href="/graph" setPosition={setPosition}>Graph</Tab>
+      <Tab href="/upload" setPosition={setPosition}>Upload</Tab>
 
       <Cursor position={position} />
     </ul>
@@ -29,9 +30,11 @@ function NavHeader() {
 const Tab = ({
   children,
   setPosition,
+  href,
 }: {
   children: React.ReactNode;
   setPosition: any;
+  href: string;
 }) => {
   const ref = useRef<HTMLLIElement>(null);
   return (
@@ -49,18 +52,23 @@ const Tab = ({
       }}
       className="relative z-10 block cursor-pointer px-3 py-1.5 text-xs uppercase text-white mix-blend-difference md:px-5 md:py-3 md:text-base"
     >
-      {children}
+      <Link href={href}>{children}</Link>
     </li>
   );
 };
 
-const Cursor = ({ position }: { position: any }) => {
+function Cursor({ position }: { position: any }) {
   return (
-    <motion.li
+    <motion.div
+      className="absolute inset-0 z-0 rounded-full bg-black"
       animate={position}
-      className="absolute z-0 h-7 rounded-full bg-black md:h-12"
+      transition={{
+        type: "spring",
+        stiffness: 350,
+        damping: 25,
+      }}
     />
   );
-};
+}
 
 export default NavHeader;
