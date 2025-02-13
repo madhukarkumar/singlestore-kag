@@ -13,12 +13,12 @@ function NavHeader() {
 
   return (
     <header className="bg-white border-b border-gray-200 px-6 py-4">
-      <div className="flex flex-col space-y-4">
+      <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-800">
           SingleStore Prime Radian
         </h1>
         <ul
-          className="relative mx-auto flex w-fit rounded-full border-2 border-black bg-white p-1"
+          className="relative flex w-fit rounded-full border-2 border-black bg-white p-1"
           onMouseLeave={() => setPosition((pv) => ({ ...pv, opacity: 0 }))}
         >
           <Tab href="/" setPosition={setPosition}>Home</Tab>

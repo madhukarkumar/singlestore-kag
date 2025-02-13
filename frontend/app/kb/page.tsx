@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { Spinner } from '../../components/Spinner';
 import KnowledgeGraph from '../../components/KnowledgeGraph';
 import NavHeader from '@/components/NavHeader';
-import SearchForm from '@/components/SearchForm';
 
 interface DocumentStats {
   doc_id: number;
@@ -63,32 +62,10 @@ export default function KBPage() {
     <main className="min-h-screen bg-gray-50">
       <NavHeader />
       <div className="container mx-auto px-4 py-8">
-        <div className="max-w-4xl mx-auto">
-          <SearchForm />
-        </div>
         {/* Stats Section */}
         <section className="mb-16">
-          <div className="flex justify-between items-center mb-8">
+          <div className="mb-8">
             <h1 className="text-3xl font-bold">Knowledge Base Statistics</h1>
-            <a
-              href="/kb/upload"
-              className="inline-flex items-center px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-            >
-              <svg
-                className="w-5 h-5 mr-2"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 4v16m8-8H4"
-                />
-              </svg>
-              Upload Document
-            </a>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white rounded-xl shadow-sm p-6">
