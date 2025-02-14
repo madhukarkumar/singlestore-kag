@@ -4,7 +4,7 @@
 set -e
 
 # Set up environment
-REPO_PATH="/Users/madhukarkumar/Dropbox/madhukar/git_repos/singlestore-kag"
+REPO_PATH="/Users/madhukarkumar/Dropbox/madhukar/git_repos/singlestore-kag/backend"
 cd "$REPO_PATH"
 
 # Function to create a new terminal window running a command
