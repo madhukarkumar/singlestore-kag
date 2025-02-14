@@ -1,8 +1,13 @@
 import os
+import json
 import logging
 from typing import Optional, List, Dict, Any, Tuple
 from datetime import datetime
 import fitz  # PyMuPDF
+from openai import OpenAI
+from processors.knowledge import KnowledgeGraphGenerator
+import google.generativeai as genai
+from google.generativeai.types import GenerateContentResponse
 
 from db import DatabaseConnection
 from core.config import config
@@ -18,6 +23,8 @@ os.makedirs(DOCUMENTS_DIR, exist_ok=True)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY environment variable is required")
+
+genai.configure(api_key=GEMINI_API_KEY)
 
 class PDFProcessingError(Exception):
     pass
@@ -184,45 +191,47 @@ def get_semantic_chunks(text: str) -> List[str]:
         logger.info(f"Input text length: {len(text)} characters")
         logger.info(f"Input text preview: {text[:200]}...")
         
-        # response = model.generate_content(prompt)
-        # logger.info("Received response from Gemini")
+        # Initialize Gemini model
+        model = genai.GenerativeModel('gemini-2.0-flash')
         
-        # if not response.text:
-        #     logger.warning("Gemini returned empty response, falling back to basic chunking")
-        #     return [text]
-            
-        # logger.info(f"Raw Gemini response: {response.text}")
-            
-        # # Split response into chunks
-        # chunks = [chunk.strip() for chunk in response.text.split('---') if chunk.strip()]
+        response = model.generate_content(prompt)
+        logger.info("Received response from Gemini")
         
-        # if not chunks:
-        #     logger.warning("No valid chunks found in Gemini response, falling back to basic chunking")
-        #     return [text]
+        if not response.text:
+            logger.warning("Gemini returned empty response, falling back to basic chunking")
+            return [text]
             
-        # # Apply size constraints from config
-        # filtered_chunks = []
-        # for chunk in chunks:
-        #     if chunking_config['min_chunk_size'] <= len(chunk) <= chunking_config['max_chunk_size']:
-        #         filtered_chunks.append(chunk)
-        #     else:
-        #         logger.warning(f"Chunk size {len(chunk)} outside configured bounds, skipping")
+        logger.info(f"Raw Gemini response: {response.text}")
+            
+        # Split response into chunks
+        chunks = [chunk.strip() for chunk in response.text.split('---') if chunk.strip()]
         
-        # # If all chunks were filtered out, fall back to basic chunking
-        # if not filtered_chunks:
-        #     logger.warning("All chunks filtered out, falling back to basic chunking")
-        #     return [text]
+        if not chunks:
+            logger.warning("No valid chunks found in Gemini response, falling back to basic chunking")
+            return [text]
             
-        # # Log each chunk
-        # logger.info(f"Generated {len(filtered_chunks)} semantic chunks:")
-        # for i, chunk in enumerate(filtered_chunks, 1):
-        #     logger.info(f"Chunk {i}/{len(filtered_chunks)}:")
-        #     logger.info(f"Length: {len(chunk)} characters")
-        #     logger.info(f"Content: {chunk}")
-        #     logger.info("-" * 80)
+        # Apply size constraints from config
+        filtered_chunks = []
+        for chunk in chunks:
+            if chunking_config['min_chunk_size'] <= len(chunk) <= chunking_config['max_chunk_size']:
+                filtered_chunks.append(chunk)
+            else:
+                logger.warning(f"Chunk size {len(chunk)} outside configured bounds, skipping")
+        
+        # If all chunks were filtered out, fall back to basic chunking
+        if not filtered_chunks:
+            logger.warning("All chunks filtered out, falling back to basic chunking")
+            return [text]
             
-        return [text]
+        # Log each chunk
+        logger.info(f"Generated {len(filtered_chunks)} semantic chunks:")
+        for i, chunk in enumerate(filtered_chunks, 1):
+            logger.info(f"Chunk {i}/{len(filtered_chunks)}:")
+            logger.info(f"Length: {len(chunk)} characters")
+            logger.info(f"Content: {chunk}")
+            logger.info("-" * 80)
             
+        return filtered_chunks
     except Exception as e:
         logger.error(f"Error in semantic chunking: {str(e)}")
         logger.warning("Falling back to basic chunking")
@@ -468,35 +477,35 @@ def process_pdf(doc_id: int, task=None):
                 chunk_metadata_id = conn.execute_query("SELECT LAST_INSERT_ID()")[0][0]
                 
                 # Get embedding for chunk content
-                # client = OpenAI()
-                # response = client.embeddings.create(
-                #     model="text-embedding-ada-002",
-                #     input=chunk["content"]
-                # )
-                # embedding = response.data[0].embedding
+                client = OpenAI()
+                response = client.embeddings.create(
+                    model="text-embedding-ada-002",
+                    input=chunk["content"]
+                )
+                embedding = response.data[0].embedding
                 
                 # Store chunk and embedding
-                # conn.execute_query(
-                #     """
-                #     INSERT INTO Document_Embeddings (doc_id, content, embedding) 
-                #     VALUES (%s, %s, JSON_ARRAY_PACK(%s))
-                #     """,
-                #     (doc_id, chunk['content'], json.dumps(embedding))
-                # )
+                conn.execute_query(
+                    """
+                    INSERT INTO Document_Embeddings (doc_id, content, embedding) 
+                    VALUES (%s, %s, JSON_ARRAY_PACK(%s))
+                    """,
+                    (doc_id, chunk['content'], json.dumps(embedding))
+                )
             
             # Extract and store knowledge
-            # kg = KnowledgeGraphGenerator(debug_output=True)
-            # for i, chunk in enumerate(enhanced_chunks):
-            #     chunk_text = chunk['content']
-            #     logger.debug(f"Processing chunk {i}, content: {repr(chunk_text)}")  # Debug log
-            #     try:
-            #         knowledge = kg.extract_knowledge_sync(chunk_text)
-            #         if knowledge:
-            #             kg.store_knowledge(knowledge, conn)
-            #     except Exception as e:
-            #         logger.error(f"Error processing chunk {i}: {str(e)}")
-            #         logger.debug(f"Problematic chunk content: {repr(chunk_text)}")
-            #         continue  # Skip failed chunk and continue with others
+            kg = KnowledgeGraphGenerator(debug_output=True)
+            for i, chunk in enumerate(enhanced_chunks):
+                chunk_text = chunk['content']
+                logger.debug(f"Processing chunk {i}, content: {repr(chunk_text)}")  # Debug log
+                try:
+                    knowledge = kg.extract_knowledge_sync(chunk_text)
+                    if knowledge:
+                        kg.store_knowledge(knowledge, conn)
+                except Exception as e:
+                    logger.error(f"Error processing chunk {i}: {str(e)}")
+                    logger.debug(f"Problematic chunk content: {repr(chunk_text)}")
+                    continue  # Skip failed chunk and continue with others
             
             # Update status to completed
             update_processing_status(doc_id, "completed")

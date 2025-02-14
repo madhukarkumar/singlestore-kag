@@ -11,6 +11,8 @@ from typing import Dict, List, Any, Optional
 import json
 import re
 from datetime import datetime
+from dotenv import load_dotenv
+from openai import OpenAI
 
 from db import DatabaseConnection
 from core.config import config
