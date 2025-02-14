@@ -1,4 +1,3 @@
 - [x] Reorganize into frontend and backend
-- [ ] Add response times and analyze and optimize latency
 - [ ] Deploy backend to replit
 - [ ] Improve configuration management and UI

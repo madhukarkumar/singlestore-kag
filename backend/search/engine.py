@@ -120,12 +120,38 @@ class RAGQueryEngine:
     def text_search(self, db: DatabaseConnection, query: str, limit: int = 10) -> List[Dict]:
         """Perform full-text keyword search using Full-Text Search Version 2."""
         try:
+            # Limit query length to prevent parser errors
+            max_query_length = self.search_config.get('max_query_length', 500)
+            if len(query) > max_query_length:
+                # Take first N chars of original query + important keywords
+                words = query.split()
+                base_query = ' '.join(words[:10])  # First 10 words
+                important_words = [w for w in words[10:] if len(w) > 3][:20]  # Up to 20 important keywords
+                query = f"{base_query} {' '.join(important_words)}"
+                logger.info(f"Query truncated to: {query}")
+
+            # Replace hyphens with spaces for better matching
+            query = query.replace('-', ' ')
+            
             # Extract key phrases (quoted terms)
             key_phrases = re.findall(r'"([^"]*)"', query)
             remaining_text = re.sub(r'"[^"]*"', '', query)
             
-            # Split remaining text into terms
-            terms = [t.strip() for t in remaining_text.split() if t.strip()]
+            # Split remaining text into terms and clean them
+            terms = set()  # Use set to deduplicate
+            multi_word_terms = set()  # For terms with spaces
+            
+            for t in remaining_text.split():
+                t = t.strip()
+                if t:
+                    # Escape special characters that could break the parser
+                    t = re.sub(r'[+\-=&|><!(){}[\]^"~*?:/\\]', ' ', t)
+                    t = t.strip()
+                    if t:
+                        if ' ' in t:
+                            multi_word_terms.add(t)
+                        elif len(t) > 2:  # Only add single words if longer than 2 chars
+                            terms.add(t.lower())  # Normalize to lowercase
             
             # Build search expression with semantic operators
             search_parts = []
@@ -133,25 +159,35 @@ class RAGQueryEngine:
             # Add exact phrases with high weight
             for phrase in key_phrases:
                 if phrase:
-                    search_parts.append(f'content:"{phrase}">>{self.search_config["exact_phrase_weight"]}')
+                    # Escape special characters in phrases
+                    phrase = re.sub(r'[+\-=&|><!(){}[\]^"~*?:/\\]', ' ', phrase)
+                    phrase = phrase.strip()
+                    if phrase:
+                        search_parts.append(f'content:"{phrase}">>{self.search_config.get("exact_phrase_weight", 2.0)}')
+            
+            # Add multi-word terms as phrases
+            for term in multi_word_terms:
+                search_parts.append(f'content:"{term}">>{self.search_config.get("exact_phrase_weight", 2.0)}')
             
             # Add individual terms with proximity search
             if terms:
-                # Group terms for proximity search
-                terms_str = ' '.join(terms)
-                search_parts.append(f'content:"{terms_str}"~{self.search_config["proximity_distance"]}')
+                # Group terms for proximity search (limited to 5 terms to prevent complexity)
+                proximity_terms = list(terms)[:5]
+                terms_str = ' '.join(proximity_terms)
+                if terms_str:
+                    search_parts.append(f'content:"{terms_str}"~{self.search_config.get("proximity_distance", 5)}')
                 
-                # Add individual terms with lower weight
+                # Add individual terms with lower weight (avoiding duplicates)
                 for term in terms:
-                    if len(term) > 2:  # Skip very short terms
-                        search_parts.append(f'content:{term}>>{self.search_config["single_term_weight"]}')
+                    search_parts.append(f'content:{term}>>{self.search_config.get("single_term_weight", 1.5)}')
             
             # Return empty results if no search terms found
             if not search_parts:
                 logger.info("No valid search terms found, returning empty results")
                 return []
             
-            # Combine all parts with OR
+            # Combine all parts with OR (limit number of clauses)
+            search_parts = search_parts[:50]  # Limit to prevent too complex queries
             formatted_query = ' OR '.join(search_parts)
             logger.info(f"Text search query: {formatted_query}")
             
@@ -265,19 +301,14 @@ class RAGQueryEngine:
         # Extract key concepts using OpenAI or Groq
         try:
             # Get model based on configuration
-            model = os.getenv("QUERY_EXPANSION_MODEL") or "gpt-3.5-turbo"
-            
-            # If using Groq, ensure we use a supported model
             if self.groq_api_key and self.response_config.get('groq_base_url'):
-                if not any(model.startswith(prefix) for prefix in ['llama-']):
-                    logger.warning(f"Model {model} not supported by Groq for query expansion, falling back to llama-3.3-70b-versatile")
-                    model = 'llama-3.3-70b-versatile'
+                model = self.response_config.get('query_expansion', {}).get('groq_model', 'mixtral-8x7b-32768')
                 logger.info(f"Using Groq model for query expansion: {model}")
                 response = self.response_client.chat.completions.create(
                     model=model,
                     messages=[{
                         "role": "system",
-                        "content": "Extract and expand key concepts from the query. Format: concept1 | synonym1, synonym2 | concept2 | synonym1, synonym2"
+                        "content": "Extract and expand key concepts from the query. Format: concept1 | synonym1, synonym2 | concept2 | synonym1, synonym2. Limit your answers to less than 300 words"
                     }, {
                         "role": "user",
                         "content": query
@@ -286,6 +317,7 @@ class RAGQueryEngine:
                 )
             else:
                 # Use OpenAI for query expansion
+                model = self.response_config.get('query_expansion', {}).get('openai_model', 'gpt-4o')
                 logger.info(f"Using OpenAI model for query expansion: {model}")
                 response = self.embedding_client.chat.completions.create(
                     model=model,
@@ -389,16 +421,16 @@ class RAGQueryEngine:
         """Generate a response using the language model."""
         try:
             # Get model configuration
-            model = os.getenv("RESPONSE_GENERATION_MODEL") or self.response_config.get('model', 'gpt-3.5-turbo')
+            model = self.response_config.get('model', 'gpt-4o')
             model_config = self.response_config.get('model_config', {}).get(model, {})
             max_tokens = model_config.get('max_tokens', self.response_config.get('max_tokens', 1000))
             temperature = model_config.get('temperature', self.response_config.get('temperature', 0.3))
             
             # If using Groq, ensure we use a supported model
             if self.groq_api_key and self.response_config.get('groq_base_url'):
-                if not any(model.startswith(prefix) for prefix in ['llama-']):
-                    logger.warning(f"Model {model} not supported by Groq, falling back to llama-3.3-70b-versatile")
-                    model = 'llama-3.3-70b-versatile'
+                if not any(model.startswith(prefix) for prefix in ['mixtral-']):
+                    logger.warning(f"Model {model} not supported by Groq, falling back to mixtral-8x7b-32768")
+                    model = 'mixtral-8x7b-32768'
             
             response = self.response_client.chat.completions.create(
                 model=model,
