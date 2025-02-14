@@ -41,16 +41,36 @@ class RAGQueryEngine:
         """
         # Load environment variables
         load_dotenv(override=True)
-        
-        # Set up OpenAI client
-        self.openai_api_key = os.getenv("OPENAI_API_KEY")
-        if not self.openai_api_key:
-            raise ValueError("OPENAI_API_KEY environment variable is required")
-        self.openai_client = OpenAI()  # OpenAI will automatically use the OPENAI_API_KEY environment variable
+        logger.info("Environment variables loaded")
         
         # Get configuration
         self.search_config = config.retrieval['search']
         self.response_config = config.retrieval['response_generation']
+        
+        # Set up OpenAI client for embeddings (required)
+        self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        logger.info(f"OpenAI API Key present: {bool(self.openai_api_key)}")
+        
+        if not self.openai_api_key:
+            logger.error("OPENAI_API_KEY environment variable is missing")
+            raise ValueError("OPENAI_API_KEY environment variable is required for embeddings")
+            
+        self.embedding_client = OpenAI()  # Will use OPENAI_API_KEY from environment
+        
+        # Set up response generation client (OpenAI or Groq)
+        self.groq_api_key = os.getenv("GROQ_API_KEY")
+        groq_base_url = self.response_config.get('groq_base_url')
+        
+        # Use Groq for response generation if configured
+        if self.groq_api_key and groq_base_url:
+            logger.info("Using Groq API for response generation")
+            self.response_client = OpenAI(
+                base_url=groq_base_url,
+                api_key=self.groq_api_key
+            )
+        else:
+            logger.info("Using OpenAI API for response generation")
+            self.response_client = self.embedding_client  # Use same OpenAI client
         
         # Debug configuration
         self.debug_output = debug_output
@@ -61,7 +81,7 @@ class RAGQueryEngine:
     def get_query_embedding(self, query: str) -> List[float]:
         """Get embedding for the query text."""
         try:
-            response = self.openai_client.embeddings.create(
+            response = self.embedding_client.embeddings.create(
                 model="text-embedding-ada-002",
                 input=query
             )
@@ -242,20 +262,42 @@ class RAGQueryEngine:
         query = re.sub(r'[^\w\s?.!,]', ' ', query)
         query = ' '.join(query.split())
         
-        # Extract key concepts using OpenAI
+        # Extract key concepts using OpenAI or Groq
         try:
-            model = os.getenv("QUERY_EXPANSION_MODEL", "gpt-3.5-turbo")  # Default to gpt-3.5-turbo if not set
-            response = self.openai_client.chat.completions.create(
-                model=model,
-                messages=[{
-                    "role": "system",
-                    "content": "Extract and expand key concepts from the query. Format: concept1 | synonym1, synonym2 | concept2 | synonym1, synonym2"
-                }, {
-                    "role": "user",
-                    "content": query
-                }],
-                temperature=0.0
-            )
+            # Get model based on configuration
+            model = os.getenv("QUERY_EXPANSION_MODEL") or "gpt-3.5-turbo"
+            
+            # If using Groq, ensure we use a supported model
+            if self.groq_api_key and self.response_config.get('groq_base_url'):
+                if not any(model.startswith(prefix) for prefix in ['llama-']):
+                    logger.warning(f"Model {model} not supported by Groq for query expansion, falling back to llama-3.3-70b-versatile")
+                    model = 'llama-3.3-70b-versatile'
+                logger.info(f"Using Groq model for query expansion: {model}")
+                response = self.response_client.chat.completions.create(
+                    model=model,
+                    messages=[{
+                        "role": "system",
+                        "content": "Extract and expand key concepts from the query. Format: concept1 | synonym1, synonym2 | concept2 | synonym1, synonym2"
+                    }, {
+                        "role": "user",
+                        "content": query
+                    }],
+                    temperature=0.0
+                )
+            else:
+                # Use OpenAI for query expansion
+                logger.info(f"Using OpenAI model for query expansion: {model}")
+                response = self.embedding_client.chat.completions.create(
+                    model=model,
+                    messages=[{
+                        "role": "system",
+                        "content": "Extract and expand key concepts from the query. Format: concept1 | synonym1, synonym2 | concept2 | synonym1, synonym2"
+                    }, {
+                        "role": "user",
+                        "content": query
+                    }],
+                    temperature=0.0
+                )
             
             # Parse expanded concepts
             expanded = response.choices[0].message.content
@@ -341,41 +383,33 @@ class RAGQueryEngine:
         return config.get_response_prompt(query, context)
         
     def generate_response(self, query: str, context: Dict[str, Any]) -> str:
-        """Generate a response using the LLM."""
+        """Generate a response using the language model."""
         try:
-            prompt = self._build_prompt(query, context)
-            
-            # Get model from config or env
+            # Get model configuration
             model = os.getenv("RESPONSE_GENERATION_MODEL") or self.response_config.get('model', 'gpt-3.5-turbo')
-            logger.info(f"Using model: {model}")
-            
-            # Get model-specific configuration
             model_config = self.response_config.get('model_config', {}).get(model, {})
+            max_tokens = model_config.get('max_tokens', self.response_config.get('max_tokens', 1000))
+            temperature = model_config.get('temperature', self.response_config.get('temperature', 0.3))
             
-            # Create API parameters with model-specific or default values
-            api_params = {
-                "model": model,
-                "messages": [
+            # If using Groq, ensure we use a supported model
+            if self.groq_api_key and self.response_config.get('groq_base_url'):
+                if not any(model.startswith(prefix) for prefix in ['llama-']):
+                    logger.warning(f"Model {model} not supported by Groq, falling back to llama-3.3-70b-versatile")
+                    model = 'llama-3.3-70b-versatile'
+            
+            response = self.response_client.chat.completions.create(
+                model=model,
+                messages=[
                     {"role": "system", "content": "You are a helpful assistant that answers questions based on the provided context."},
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": f"Query: {query}\n\nContext: {context}"}
                 ],
-                "temperature": model_config.get('temperature', self.response_config.get('temperature', 0.3)),
-                "max_tokens": model_config.get('max_tokens', self.response_config.get('max_tokens', 1500))
-            }
-            
-            logger.info(f"Using model configuration: temperature={api_params['temperature']}, max_tokens={api_params['max_tokens']}")
-            
-            response = self.openai_client.chat.completions.create(**api_params)
-            
-            if not response.choices:
-                logger.error("No response from OpenAI")
-                return "I apologize, but I couldn't generate a response at this time."
-                
+                max_tokens=max_tokens,
+                temperature=temperature
+            )
             return response.choices[0].message.content
-            
         except Exception as e:
             logger.error(f"Error generating response: {str(e)}")
-            return "I apologize, but I encountered an error while generating the response."
+            raise
 
     def get_entities_for_content(self, db: DatabaseConnection, content: str) -> List[Entity]:
         """Find entities mentioned in the content."""

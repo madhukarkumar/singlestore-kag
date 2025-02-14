@@ -42,6 +42,13 @@ retrieval:
       gpt-4-turbo:
         max_tokens: 2500
         temperature: 0.25
+      mixtral-8x7b-32768:  # Groq model
+        max_tokens: 2000
+        temperature: 0.3
+      llama-3.3-70b-versatile:     # Groq model
+        max_tokens: 1024
+        temperature: 0.3
+    groq_base_url: "https://api.groq.com/openai/v1"  # Groq API endpoint
     temperature: 0.3  # Global default if not specified in model_config
     max_tokens: 1500  # Global default if not specified in model_config
     citation_style: "inline"

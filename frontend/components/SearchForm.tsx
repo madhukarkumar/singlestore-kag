@@ -102,9 +102,18 @@ export default function SearchForm() {
         <div className="h-full flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-twisty-gray-200">
-            <h2 className="text-twisty-xl font-twisty font-semibold text-twisty-secondary">
-              Search Results
-            </h2>
+            <div>
+              <h2 className="text-twisty-xl font-twisty font-semibold text-twisty-secondary">
+                Search Results
+              </h2>
+              {response && (
+                <p className="text-sm text-twisty-gray-500 mt-1">
+                  Response time: {response.execution_time >= 1 
+                    ? `${response.execution_time.toFixed(2)}s` 
+                    : `${(response.execution_time * 1000).toFixed(0)}ms`}
+                </p>
+              )}
+            </div>
             <button
               onClick={() => setIsResponseVisible(false)}
               className="p-2 text-twisty-gray-500 hover:text-twisty-gray-700 rounded-full 
