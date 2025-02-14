@@ -3,6 +3,7 @@
 import React, { useRef, useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import Logo from "./Logo";
 
 function NavHeader() {
   const [position, setPosition] = useState({
@@ -14,9 +15,12 @@ function NavHeader() {
   return (
     <header className="bg-white border-b border-gray-200 px-6 py-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold text-gray-800">
-          SingleStore Prime Radian
-        </h1>
+        <div className="flex items-center gap-3">
+          <Logo className="text-gray-800" size={32} />
+          <h1 className="text-2xl font-semibold text-gray-800">
+            SingleStore Prime Radian
+          </h1>
+        </div>
         <ul
           className="relative flex w-fit rounded-full border-2 border-black bg-white p-1"
           onMouseLeave={() => setPosition((pv) => ({ ...pv, opacity: 0 }))}

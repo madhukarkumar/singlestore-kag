@@ -152,12 +152,12 @@ Search documents using natural language queries.
 
 ### Knowledge Base
 
-#### Get Knowledge Base Data
+#### Get Knowledge Base Statistics
 ```http
 GET /kbdata
 ```
 
-Get statistics and information about the knowledge base.
+Retrieve statistics about the knowledge base and specific documents.
 
 **Response:**
 ```json
@@ -166,7 +166,7 @@ Get statistics and information about the knowledge base.
   "total_chunks": "integer",
   "total_entities": "integer",
   "total_relationships": "integer",
-  "document_stats": [
+  "documents": [
     {
       "doc_id": "integer",
       "title": "string",
@@ -178,8 +178,10 @@ Get statistics and information about the knowledge base.
 }
 ```
 
+Note: Entity counts are based on entities that have relationships within each document. An entity is considered part of a document if it appears in any relationship (as source or target) associated with that document.
+
 **Status Codes:**
-- `200 OK`: Data retrieved successfully
+- `200 OK`: Statistics retrieved successfully
 - `500 Internal Server Error`: Server error
 
 #### Get Graph Data
@@ -213,6 +215,87 @@ Get knowledge graph visualization data.
 
 **Status Codes:**
 - `200 OK`: Data retrieved successfully
+- `500 Internal Server Error`: Server error
+
+### Configuration
+
+#### Get Configuration
+```http
+GET /config
+```
+
+Get current application configuration settings.
+
+**Response:**
+```json
+{
+  "knowledge_creation": {
+    "chunking": {
+      "rules": "object",
+      "sizes": "object",
+      "overlap": "integer"
+    },
+    "entity_extraction": {
+      "model": "string",
+      "thresholds": "object",
+      "prompts": "object"
+    }
+  },
+  "retrieval": {
+    "search": {
+      "weights": "object",
+      "thresholds": "object",
+      "window_sizes": "object"
+    },
+    "response_generation": {
+      "temperature": "float",
+      "max_tokens": "integer",
+      "style": "string"
+    }
+  }
+}
+```
+
+#### Update Configuration
+```http
+POST /config
+Content-Type: application/json
+```
+
+Update application configuration settings.
+
+**Request Body:**
+```json
+{
+  "knowledge_creation": {
+    "chunking": {
+      "rules": "object",
+      "sizes": "object",
+      "overlap": "integer"
+    }
+  },
+  "retrieval": {
+    "search": {
+      "weights": {
+        "vector": "float",
+        "text": "float"
+      }
+    }
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "message": "Configuration updated successfully"
+}
+```
+
+**Status Codes:**
+- `200 OK`: Configuration updated successfully
+- `400 Bad Request`: Invalid configuration data
 - `500 Internal Server Error`: Server error
 
 ### Management
@@ -278,3 +361,69 @@ Currently, there are no rate limits implemented.
    - Always check response status codes
    - Handle error responses appropriately
    - Implement proper retry logic for failed requests
+
+5. **Configuration Management:**
+   - Use environment variables for sensitive data
+   - Dynamic configuration updates
+   - Type-safe configuration
+   - Validation on updates
+
+6. **Security:**
+   - Input validation
+   - File size limits
+   - CORS configuration
+   - Rate limiting (planned)
+
+## Implementation Notes
+
+### Backend Organization
+
+The backend is organized into several key components:
+
+1. **API Layer** (`api.py`)
+   - FastAPI application and endpoints
+   - Request/response handling
+   - Error management
+   - CORS configuration
+
+2. **Document Processing** (`pdf_processor.py`)
+   - PDF parsing and validation
+   - Text extraction
+   - Progress tracking
+   - Error handling
+
+3. **Knowledge Graph** (`knowledge_graph.py`)
+   - Entity extraction
+   - Relationship identification
+   - Graph construction
+   - Storage management
+
+4. **Search Engine** (`rag_query.py`)
+   - Vector similarity search
+   - Full-text search
+   - Response generation
+   - Result ranking
+
+5. **Database Layer** (`db.py`)
+   - SingleStore connection management
+   - Query execution
+   - Transaction handling
+   - Error recovery
+
+6. **Task Queue** (`tasks.py`)
+   - Celery task definitions
+   - Progress tracking
+   - Error handling
+   - Status updates
+
+7. **Configuration** (`config.yaml`, `config_loader.py`)
+   - Application settings
+   - Dynamic configuration
+   - Environment variables
+   - Validation rules
+
+8. **Models** (`models.py`)
+   - Pydantic data models
+   - Request/response schemas
+   - Validation rules
+   - Type definitions

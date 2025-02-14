@@ -2,25 +2,34 @@
 SingleStore database connection and operations module.
 """
 import os
+from typing import List, Dict, Any, Optional, Tuple
+import mysql.connector
+from mysql.connector import Error
+import numpy as np
+import json
+from datetime import datetime
 import logging
-from typing import Optional, Any, Dict, List, Tuple
 
-import singlestoredb as s2
-from dotenv import load_dotenv
+from core.config import config
+from core.models import Document, DocumentChunk, Entity, Relationship
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
 # Load environment variables
-load_dotenv(override=True)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
+except ImportError:
+    logger.warning("python-dotenv not found, using environment variables directly")
 
 # Database configuration
-DB_HOST = os.getenv("SINGLESTORE_HOST")
-DB_PORT = os.getenv("SINGLESTORE_PORT", "3306")  # Default SingleStore port
-DB_USER = os.getenv("SINGLESTORE_USER")
-DB_PASSWORD = os.getenv("SINGLESTORE_PASSWORD")
-DB_DATABASE = os.getenv("SINGLESTORE_DATABASE")
+DB_HOST = os.getenv("SINGLESTORE_HOST", "localhost")
+DB_PORT = int(os.getenv("SINGLESTORE_PORT", "3306"))  # Default SingleStore port
+DB_USER = os.getenv("SINGLESTORE_USER", "root")
+DB_PASSWORD = os.getenv("SINGLESTORE_PASSWORD", "")
+DB_DATABASE = os.getenv("SINGLESTORE_DATABASE", "knowledge_graph")
 
 class DatabaseConnection:
     """Manages database connections and operations for SingleStore."""
@@ -48,28 +57,36 @@ class DatabaseConnection:
             )
         
         try:
-            self.conn = s2.connect(
+            self.conn = mysql.connector.connect(
                 host=DB_HOST,
                 port=DB_PORT,
                 user=DB_USER,
                 password=DB_PASSWORD,
                 database=DB_DATABASE
             )
-            self.cursor = self.conn.cursor()
+            self.cursor = self.conn.cursor(buffered=True)
             logger.info("Successfully connected to SingleStore database")
             
         except Exception as e:
             logger.error(f"Failed to connect to database: {str(e)}")
             raise
-    
+
     def disconnect(self) -> None:
         """Close database connection and cursor."""
         if self.cursor:
-            self.cursor.close()
+            try:
+                self.cursor.close()
+            except Exception:
+                pass
+            self.cursor = None
         if self.conn:
-            self.conn.close()
+            try:
+                self.conn.close()
+            except Exception:
+                pass
+            self.conn = None
             logger.info("Database connection closed")
-    
+
     def execute_query(self, query: str, params: Optional[tuple] = None) -> Optional[List[Tuple[Any, ...]]]:
         """
         Execute a SQL query and return results if any.
@@ -85,12 +102,8 @@ class DatabaseConnection:
             Exception: If query execution fails
         """
         try:
-            if not self.conn or getattr(self.conn, '_closed', True):
-                logger.error("No active database connection")
+            if not self.conn or not self.cursor:
                 raise Exception("No active database connection")
-            
-            if not self.cursor:
-                self.cursor = self.conn.cursor()
             
             self.cursor.execute(query, params)
             
@@ -103,7 +116,7 @@ class DatabaseConnection:
             return None
             
         except Exception as e:
-            logger.error("Query execution failed: %s", str(e))
+            logger.error(f"Query execution failed: {str(e)}")
             if self.conn:
                 self.conn.rollback()
             raise
@@ -185,6 +198,11 @@ class DatabaseConnection:
                 create_documents = """
                 CREATE TABLE Documents (
                     doc_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                    filename VARCHAR(255) NOT NULL,
+                    file_size BIGINT,
+                    upload_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    status ENUM('processing', 'processed', 'error') DEFAULT 'processing',
+                    error_message TEXT,
                     title VARCHAR(255),
                     author VARCHAR(100),
                     publish_date DATE,
@@ -238,6 +256,14 @@ class DatabaseConnection:
     
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
+        if exc_type is not None:
+            # An exception occurred, rollback any changes
+            if self.conn:
+                self.conn.rollback()
+        else:
+            # No exception, commit any pending changes
+            if self.conn and not getattr(self.conn, '_closed', True):
+                self.conn.commit()
         self.disconnect()
 
 

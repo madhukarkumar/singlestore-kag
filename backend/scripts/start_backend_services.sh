@@ -4,7 +4,7 @@
 set -e
 
 # Set up environment
-REPO_PATH="/Users/madhukarkumar/Dropbox/madhukar/git_repos/singlestore-kag"
+REPO_PATH="/Users/madhukarkumar/Dropbox/madhukar/git_repos/singlestore-kag/backend"
 cd "$REPO_PATH"
 
 # Function to create a new terminal window running a command
@@ -28,8 +28,8 @@ EOF
 
 # Kill existing processes
 echo "Stopping existing services..."
-pkill -f "celery -A tasks worker" || true
-pkill -f "uvicorn api:app" || true
+pkill -f "celery -A tasks" || true
+pkill -f "uvicorn api.routes:app" || true
 sleep 2
 
 # Restart Redis
@@ -48,7 +48,7 @@ create_terminal_window "Celery Worker" "celery -A tasks worker --loglevel=info"
 
 # Start FastAPI Backend
 echo "Starting FastAPI Backend..."
-create_terminal_window "FastAPI" "uvicorn api:app --reload"
+create_terminal_window "FastAPI" "uvicorn api.routes:app --reload"
 
 echo "All services started!"
 echo "Check the Terminal windows for each service's output"

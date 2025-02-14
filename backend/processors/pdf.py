@@ -1,33 +1,30 @@
 import os
-import fitz  # PyMuPDF
 import json
-from datetime import datetime
-from typing import Optional, Tuple, List, Dict, Any
-from pathlib import Path
-from db import DatabaseConnection
-from models import ProcessingStatus, ProcessingStatusResponse
 import logging
-import json
-from knowledge_graph import KnowledgeGraphGenerator
+from typing import Optional, List, Dict, Any, Tuple
+from datetime import datetime
+import fitz  # PyMuPDF
 from openai import OpenAI
+from processors.knowledge import KnowledgeGraphGenerator
 import google.generativeai as genai
 from google.generativeai.types import GenerateContentResponse
-import re
-from config_loader import config
-import numpy as np
+
+from db import DatabaseConnection
+from core.config import config
+from core.models import Document, DocumentChunk
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
-DOCUMENTS_DIR = Path("documents")
-DOCUMENTS_DIR.mkdir(exist_ok=True)
+DOCUMENTS_DIR = os.path.join(os.getcwd(), "documents")
+os.makedirs(DOCUMENTS_DIR, exist_ok=True)
 
 # Configure Gemini
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY environment variable is required")
+
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-2.0-flash')
 
 class PDFProcessingError(Exception):
     pass
@@ -56,19 +53,19 @@ def save_pdf(file_data: bytes, filename: str) -> str:
     """Save PDF file to documents directory"""
     base_filename = "".join(c for c in filename if c.isalnum() or c in "._- ")
     name, ext = os.path.splitext(base_filename)
-    file_path = DOCUMENTS_DIR / base_filename
+    file_path = os.path.join(DOCUMENTS_DIR, base_filename)
     counter = 1
     
     # If file exists, append a number to the filename
-    while file_path.exists():
+    while os.path.exists(file_path):
         new_filename = f"{name}_{counter}{ext}"
-        file_path = DOCUMENTS_DIR / new_filename
+        file_path = os.path.join(DOCUMENTS_DIR, new_filename)
         counter += 1
     
     with open(file_path, "wb") as f:
         f.write(file_data)
     
-    return str(file_path)
+    return file_path
 
 def create_document_record(filename: str, file_path: str, file_size: int) -> int:
     """Create initial document record and return doc_id"""
@@ -129,7 +126,7 @@ def update_processing_status(doc_id: int, step: str, error_message: Optional[str
     finally:
         conn.disconnect()
 
-def get_processing_status(doc_id: int) -> ProcessingStatusResponse:
+def get_processing_status(doc_id: int) -> Dict[str, Any]:
     """Get current processing status"""
     conn = DatabaseConnection()
     try:
@@ -152,11 +149,11 @@ def get_processing_status(doc_id: int) -> ProcessingStatusResponse:
             update_processing_status(doc_id, 'failed', error_message)
             current_step = 'failed'
             
-        return ProcessingStatusResponse(
-            currentStep=current_step,
-            errorMessage=error_message,
-            fileName=file_name
-        )
+        return {
+            "currentStep": current_step,
+            "errorMessage": error_message,
+            "fileName": file_name
+        }
     finally:
         conn.disconnect()
 
@@ -193,6 +190,9 @@ def get_semantic_chunks(text: str) -> List[str]:
         logger.info("Sending request to Gemini for semantic chunking")
         logger.info(f"Input text length: {len(text)} characters")
         logger.info(f"Input text preview: {text[:200]}...")
+        
+        # Initialize Gemini model
+        model = genai.GenerativeModel('gemini-2.0-flash')
         
         response = model.generate_content(prompt)
         logger.info("Received response from Gemini")
@@ -232,7 +232,6 @@ def get_semantic_chunks(text: str) -> List[str]:
             logger.info("-" * 80)
             
         return filtered_chunks
-            
     except Exception as e:
         logger.error(f"Error in semantic chunking: {str(e)}")
         logger.warning("Falling back to basic chunking")

@@ -63,7 +63,30 @@ export default {
         'twisty-md': '0 4px 6px -1px rgb(0 0 0 / 0.1)',
         'twisty-lg': '0 10px 15px -3px rgb(0 0 0 / 0.1)',
       },
+      typography: {
+        DEFAULT: {
+          css: {
+            maxWidth: 'none',
+            color: 'inherit',
+            p: {
+              marginTop: '1em',
+              marginBottom: '1em',
+            },
+            'ul, ol': {
+              paddingLeft: '1.5em',
+              marginTop: '1em',
+              marginBottom: '1em',
+            },
+            li: {
+              marginTop: '0.5em',
+              marginBottom: '0.5em',
+            },
+          },
+        },
+      },
     },
   },
-  plugins: [],
+  plugins: [
+    require('@tailwindcss/typography'),
+  ],
 } satisfies Config;

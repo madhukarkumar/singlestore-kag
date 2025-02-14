@@ -164,3 +164,22 @@ class ProcessingStatusResponse(BaseModel):
     currentStep: str
     errorMessage: Optional[str] = None
     fileName: str
+
+class Document(BaseModel):
+    """Document model representing a processed document."""
+    id: int = Field(alias="doc_id")
+    file_name: str
+    file_path: str
+    file_size: int
+    created_at: datetime
+    updated_at: datetime
+    metadata: Optional[Dict] = Field(default_factory=dict)
+
+class DocumentChunk(BaseModel):
+    """Document chunk model representing a processed document segment."""
+    id: int = Field(alias="chunk_id")
+    doc_id: int
+    content: str
+    embedding: Optional[List[float]] = None
+    metadata: Optional[Dict] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=datetime.now)

@@ -43,6 +43,7 @@ export default function SearchForm() {
     setLoading(true);
     setError(null);
     setIsResponseVisible(true);
+    setResponse(null);
 
     try {
       const response = await fetch('http://localhost:8000/kag-search', {
@@ -101,9 +102,18 @@ export default function SearchForm() {
         <div className="h-full flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-twisty-gray-200">
-            <h2 className="text-twisty-xl font-twisty font-semibold text-twisty-secondary">
-              Search Results
-            </h2>
+            <div>
+              <h2 className="text-twisty-xl font-twisty font-semibold text-twisty-secondary">
+                Search Results
+              </h2>
+              {response && (
+                <p className="text-sm text-twisty-gray-500 mt-1">
+                  Response time: {response.execution_time >= 1 
+                    ? `${response.execution_time.toFixed(2)}s` 
+                    : `${(response.execution_time * 1000).toFixed(0)}ms`}
+                </p>
+              )}
+            </div>
             <button
               onClick={() => setIsResponseVisible(false)}
               className="p-2 text-twisty-gray-500 hover:text-twisty-gray-700 rounded-full 
@@ -138,9 +148,29 @@ export default function SearchForm() {
             ) : response ? (
               <div className="space-y-6">
                 {response.generated_response && (
-                  <div className="bg-twisty-gray-50 p-4 rounded-twisty-md">
-                    <h3 className="font-semibold mb-2">AI Response</h3>
-                    <p className="text-twisty-gray-700">{response.generated_response}</p>
+                  <div className="bg-twisty-gray-50 p-6 rounded-twisty-md">
+                    <h3 className="font-semibold mb-4 text-twisty-xl">AI Response</h3>
+                    <div className="prose prose-sm max-w-none text-twisty-gray-700 whitespace-pre-wrap leading-relaxed">
+                      {response.generated_response.split('\n\n').map((paragraph, index) => (
+                        <div key={index} className="mb-4">
+                          {paragraph.split('\n').map((line, lineIndex) => (
+                            <div key={lineIndex}>
+                              {line.startsWith('- ') ? (
+                                <ul className="list-disc ml-4 my-2">
+                                  <li>{line.substring(2)}</li>
+                                </ul>
+                              ) : line.match(/^\d+\.\s/) ? (
+                                <ol className="list-decimal ml-4 my-2">
+                                  <li>{line.substring(line.indexOf(' ') + 1)}</li>
+                                </ol>
+                              ) : (
+                                line
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
                 
