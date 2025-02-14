@@ -6,24 +6,23 @@ and stores them in SingleStore for graph-based querying.
 """
 
 import os
-import json
 import logging
 from typing import Dict, List, Any, Optional
-from openai import OpenAI
-import os
-from dotenv import load_dotenv
-from db import DatabaseConnection
-import time
-import datetime
-from config_loader import config
+import json
+import re
+from datetime import datetime
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
+from db import DatabaseConnection
+from core.config import config
+from core.models import Entity, Relationship
+
+# Set up logging
 logger = logging.getLogger(__name__)
+
+# Load entity extraction prompt
+PROMPT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'search', 'prompts', 'entity_extraction_prompt.txt')
+with open(PROMPT_PATH, 'r') as f:
+    ENTITY_EXTRACTION_PROMPT = f.read()
 
 class KnowledgeGraphGenerator:
     """Generates knowledge graphs from document chunks using OpenAI."""
@@ -279,7 +278,7 @@ class KnowledgeGraphGenerator:
             filename = f"doc_{doc_id}"
             if chunk_id is not None:
                 filename += f"_chunk_{chunk_id}"
-            filename += f"_{int(time.time())}.json"
+            filename += f"_{int(datetime.now().timestamp())}.json"
             
             filepath = os.path.join(self.debug_dir, filename)
             
@@ -288,7 +287,7 @@ class KnowledgeGraphGenerator:
                 "metadata": {
                     "doc_id": doc_id,
                     "chunk_id": chunk_id,
-                    "timestamp": datetime.datetime.now().isoformat(),
+                    "timestamp": datetime.now().isoformat(),
                 },
                 "extracted_data": data
             }
@@ -458,6 +457,17 @@ class KnowledgeGraphGenerator:
             logger.error(f"Error processing document {doc_id}: {str(e)}")
             raise
 
+def generate_knowledge_graph(doc_id: int, debug_output: bool = False) -> None:
+    """
+    Generate knowledge graph for a document.
+    
+    Args:
+        doc_id: Document ID to process
+        debug_output: Whether to save debug output
+    """
+    generator = KnowledgeGraphGenerator(debug_output=debug_output)
+    generator.process_document(doc_id)
+
 def main():
     """Command line interface for knowledge graph generation."""
     import argparse
@@ -469,8 +479,7 @@ def main():
     args = parser.parse_args()
     
     try:
-        generator = KnowledgeGraphGenerator(debug_output=args.debug)
-        generator.process_document(args.doc_id)
+        generate_knowledge_graph(args.doc_id, args.debug)
         logger.info("Knowledge graph generation completed successfully")
         
     except Exception as e:

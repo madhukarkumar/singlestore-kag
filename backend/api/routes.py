@@ -5,12 +5,20 @@ import logging
 import os
 import yaml
 from typing import List, Dict, Optional, Union
-from rag_query import RAGQueryEngine
+from search.engine import RAGQueryEngine
 from db import DatabaseConnection
 import time
-from models import SearchRequest, SearchResponse, SearchResult, Entity, Relationship, KBDataResponse, KBStats, DocumentStats, GraphResponse, GraphData, GraphNode, GraphLink, ProcessingStatusResponse
+from core.models import (
+    SearchRequest, SearchResponse, SearchResult, Entity, 
+    Relationship, KBDataResponse, KBStats, DocumentStats, 
+    GraphResponse, GraphData, GraphNode, GraphLink, 
+    ProcessingStatusResponse
+)
 from datetime import datetime
-from pdf_processor import save_pdf, create_document_record, get_processing_status, cleanup_processing, PDFProcessingError
+from processors.pdf import (
+    save_pdf, create_document_record, get_processing_status, 
+    cleanup_processing, PDFProcessingError
+)
 from tasks import process_pdf_task
 from celery.result import AsyncResult
 
@@ -233,62 +241,108 @@ async def get_kb_data():
     start_time = time.time()
     try:
         with DatabaseConnection() as conn:
-            # Get total counts
-            total_docs = conn.execute_query("SELECT COUNT(*) FROM Documents")[0][0]
-            total_chunks = conn.execute_query("SELECT COUNT(*) FROM Document_Embeddings")[0][0]
-            total_entities = conn.execute_query("SELECT COUNT(*) FROM Entities")[0][0]
-            total_relationships = conn.execute_query("SELECT COUNT(*) FROM Relationships")[0][0]
-
-            # Get document details
-            doc_query = """
+            # Get total document count and size
+            doc_stats_query = """
                 SELECT 
-                    d.doc_id,
-                    COALESCE(d.title, 'Untitled') as title,
-                    COALESCE(d.publish_date, CURRENT_DATE()) as created_at,
-                    'document' as file_type,
-                    'processed' as status,
-                    COUNT(DISTINCT de.embedding_id) as chunk_count,
-                    COUNT(DISTINCT e.entity_id) as entity_count,
-                    COUNT(DISTINCT r.relationship_id) as relationship_count
-                FROM Documents d
-                LEFT JOIN Document_Embeddings de ON d.doc_id = de.doc_id
-                LEFT JOIN Relationships r ON r.doc_id = d.doc_id
-                LEFT JOIN Entities e ON (
-                    e.entity_id = r.source_entity_id OR 
-                    e.entity_id = r.target_entity_id
-                )
-                GROUP BY d.doc_id, d.title, d.publish_date
-                ORDER BY d.publish_date DESC NULLS LAST
+                    COUNT(*) as doc_count,
+                    SUM(file_size) as total_size,
+                    SUM(CASE WHEN current_step = 'completed' THEN 1 ELSE 0 END) as processed_count,
+                    SUM(CASE WHEN current_step IN ('started', 'chunking', 'embeddings', 'entities', 'relationships') THEN 1 ELSE 0 END) as processing_count,
+                    SUM(CASE WHEN current_step = 'failed' THEN 1 ELSE 0 END) as error_count
+                FROM ProcessingStatus
             """
-            docs = conn.execute_query(doc_query)
-
-            # Format document stats
-            doc_stats = []
-            for doc in docs:
-                created_at = doc[2].isoformat() if doc[2] else datetime.now().isoformat()
-                doc_stats.append(
-                    DocumentStats(
-                        doc_id=doc[0],
-                        title=doc[1],
-                        total_chunks=doc[5],
-                        total_entities=doc[6],
-                        total_relationships=doc[7],
-                        created_at=created_at,
-                        file_type=doc[3],
-                        status=doc[4]
-                    )
-                )
-
-            # Create response
+            doc_stats = conn.execute_query(doc_stats_query)[0]
+            
+            # Get entity stats
+            entity_stats_query = """
+                SELECT 
+                    COUNT(*) as total_entities,
+                    COUNT(DISTINCT category) as category_count
+                FROM Entities
+            """
+            entity_stats = conn.execute_query(entity_stats_query)[0]
+            
+            # Get relationship stats
+            rel_stats_query = """
+                SELECT 
+                    COUNT(*) as total_relationships,
+                    COUNT(DISTINCT relation_type) as type_count
+                FROM Relationships
+            """
+            rel_stats = conn.execute_query(rel_stats_query)[0]
+            
+            # Get recent documents
+            recent_docs_query = """
+                SELECT 
+                    p.doc_id,
+                    p.file_name as filename,
+                    p.file_size,
+                    p.created_at as upload_time,
+                    p.current_step as status,
+                    p.error_message
+                FROM ProcessingStatus p
+                ORDER BY p.created_at DESC
+                LIMIT 10
+            """
+            recent_docs = conn.execute_query(recent_docs_query)
+            
+            # Get category distribution
+            category_query = """
+                SELECT 
+                    category,
+                    COUNT(*) as count
+                FROM Entities
+                WHERE category IS NOT NULL
+                GROUP BY category
+                ORDER BY count DESC
+                LIMIT 10
+            """
+            categories = conn.execute_query(category_query)
+            
+            documents = []
+            for doc in recent_docs:
+                doc_id = doc[0]
+                # Get document-specific stats
+                doc_stats_query = """
+                    SELECT 
+                        COUNT(DISTINCT de.embedding_id) as chunk_count,
+                        COUNT(DISTINCT e.entity_id) as entity_count,
+                        COUNT(DISTINCT r.relationship_id) as relationship_count
+                    FROM Document_Embeddings de
+                    LEFT JOIN Relationships r ON r.doc_id = de.doc_id
+                    LEFT JOIN (
+                        SELECT DISTINCT e.entity_id, r.doc_id
+                        FROM Entities e
+                        JOIN Relationships r ON r.source_entity_id = e.entity_id OR r.target_entity_id = e.entity_id
+                    ) e ON e.doc_id = de.doc_id
+                    WHERE de.doc_id = %s
+                """
+                doc_detail = conn.execute_query(doc_stats_query, (doc_id,))[0]
+                
+                # Get file extension as file_type
+                file_type = os.path.splitext(doc[1])[1].lstrip('.') if doc[1] else 'unknown'
+                
+                documents.append(DocumentStats(
+                    doc_id=doc_id,
+                    title=doc[1],  # Using filename as title
+                    total_chunks=doc_detail[0],
+                    total_entities=doc_detail[1],
+                    total_relationships=doc_detail[2],
+                    created_at=doc[3].isoformat() if doc[3] else None,
+                    file_type=file_type,
+                    status=doc[4]
+                ))
+            
+            # Create KBStats
             kb_stats = KBStats(
-                total_documents=total_docs,
-                total_chunks=total_chunks,
-                total_entities=total_entities,
-                total_relationships=total_relationships,
-                documents=doc_stats,
+                total_documents=doc_stats[0],
+                total_chunks=sum(d.total_chunks for d in documents),
+                total_entities=entity_stats[0],
+                total_relationships=rel_stats[0],
+                documents=documents,
                 last_updated=datetime.now().isoformat()
             )
-
+            
             return KBDataResponse(
                 stats=kb_stats,
                 execution_time=time.time() - start_time
@@ -298,7 +352,7 @@ async def get_kb_data():
         logger.error(f"Error getting KB stats: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail=f"Error retrieving knowledge base data: {str(e)}"
+            detail=f"Failed to retrieve knowledge base statistics: {str(e)}"
         )
 
 @app.get("/graph-data", response_model=GraphResponse)
@@ -432,7 +486,7 @@ class FullConfig(BaseModel):
     knowledge_creation: KnowledgeCreationConfig
     retrieval: RetrievalConfig
 
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config', 'config.yaml')
 
 @app.get("/config", response_model=FullConfig, tags=["config"])
 async def get_config():

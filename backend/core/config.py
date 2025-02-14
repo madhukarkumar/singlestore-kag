@@ -2,6 +2,7 @@ import yaml
 from typing import Dict, Any
 from pathlib import Path
 import re
+import os
 
 class ConfigLoader:
     _instance = None
@@ -15,7 +16,7 @@ class ConfigLoader:
     
     def _load_config(self):
         """Load configuration from yaml file."""
-        config_path = Path(__file__).parent / 'config.yaml'
+        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config', 'config.yaml')
         with open(config_path, 'r') as f:
             self._config = yaml.safe_load(f)
     
@@ -52,6 +53,15 @@ class ConfigLoader:
         """Get formatted response generation prompt."""
         template = self.retrieval['response_generation']['prompt_template']
         return template.format(query=query, context=context)
+
+    def update_config(self, new_config: Dict[str, Any]) -> None:
+        self._config.update(new_config)
+        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config', 'config.yaml')
+        with open(config_path, 'w') as f:
+            yaml.dump(self._config, f)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._config.get(key, default)
 
 # Global instance
 config = ConfigLoader()

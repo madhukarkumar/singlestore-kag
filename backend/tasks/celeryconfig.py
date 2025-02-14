@@ -1,10 +1,9 @@
 from celery import Celery
 
 # Create Celery app
-app = Celery('singlestore_kag',
+app = Celery('tasks',
              broker='redis://localhost:6379/0',
-             backend='redis://localhost:6379/0',
-             include=['tasks'])
+             backend='redis://localhost:6379/0')
 
 # Configure Celery
 app.conf.update(

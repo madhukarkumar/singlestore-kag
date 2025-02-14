@@ -16,8 +16,8 @@ from typing import Dict, List, Any, Optional
 from openai import OpenAI
 from dotenv import load_dotenv
 from db import DatabaseConnection
-from models import Entity, Relationship, SearchResult, SearchResponse
-from config_loader import config
+from core.models import Entity, Relationship, SearchResult, SearchResponse
+from core.config import config
 import re
 import datetime
 
@@ -380,7 +380,10 @@ class RAGQueryEngine:
 
     def _build_prompt(self, query: str, context: Dict) -> str:
         """Build prompt for the LLM using retrieved context."""
-        return config.get_response_prompt(query, context)
+        PROMPT_PATH = os.path.join(os.path.dirname(__file__), 'prompts', 'rag.md')
+        with open(PROMPT_PATH, 'r') as f:
+            RAG_PROMPT_TEMPLATE = f.read()
+        return config.get_response_prompt(query, context, RAG_PROMPT_TEMPLATE)
         
     def generate_response(self, query: str, context: Dict[str, Any]) -> str:
         """Generate a response using the language model."""
