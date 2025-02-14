@@ -121,102 +121,78 @@ This structure ensures:
 
 ## Section 2 - Knowledge Retrieval
 
-The retrieval process handles user queries and returns relevant information using a hybrid search approach.
+The retrieval process implements a sophisticated RAG (Retrieval-Augmented Generation) approach that combines multiple search strategies:
 
-### 1. Query Processing (`rag_query.py`)
-The query processing stage is the entry point for user interactions with our knowledge base. It implements a sophisticated RAG (Retrieval-Augmented Generation) approach that combines multiple search strategies to understand and process user queries effectively. This hybrid approach ensures both semantic understanding and precise matching of user intentions.
-
-- **Class**: `RAGQueryEngine`
-- **Key Methods**:
-  - `query(query_text, top_k)`: Main entry point for search
-  - Handles hybrid search combining vector and text similarity
-
-**TODO - Potential Improvements**:
-- Add query intent classification
-- Implement query expansion using synonyms
-- Add support for structured queries
-- Implement query caching
-- Add query preprocessing optimizations
+### 1. Query Processing
+- **Query Preprocessing**:
+  - Special character handling
+  - Whitespace normalization
+  - Quoted phrase preservation
+  
+- **Query Expansion**:
+  - LLM-based concept extraction
+  - Synonym expansion
+  - Configurable model selection (OpenAI/Groq)
 
 ### 2. Search Implementation
-Our search implementation combines multiple search strategies to provide comprehensive and accurate results. The hybrid approach leverages both vector similarity for semantic understanding and text-based search for precise matching. This combination ensures that we capture both the meaning and the specific details in user queries.
 
-- **Vector Search**:
-  - Uses OpenAI embeddings for query encoding
-  - Performs vector similarity search using HNSW index
-  - Normalizes scores to 0-1 range
+#### Vector Search
+- **Model**: OpenAI text-embedding-ada-002
+- **Implementation**:
+  - 1536-dimensional vectors
+  - Cosine similarity via SingleStore vector operations
+  - Early exit optimization for high confidence matches
+  - Configurable result limits
 
-- **Text Search**:
-  - Uses SingleStore Full-Text Search Version 2
-  - Query format: `content:("query_text")`
-  - TF-IDF based relevance scoring
+#### Text Search
+- **Engine**: SingleStore Full-Text Search Version 2
+- **Features**:
+  - Exact phrase matching with boosted weights
+  - Proximity search for term groups
+  - Individual term weighting
+  - Configurable distance parameters
 
-- **Hybrid Scoring**:
+#### Hybrid Search
+- **Score Combination**:
   - Default weights: 70% vector, 30% text
-  - Combines normalized scores
-  - Configurable through search_config
+  - Score normalization for fair combination
+  - Configurable minimum score thresholds
+  - Result deduplication
+  - Dynamic weight adjustment based on query type
 
-**TODO - Potential Improvements**:
-- Implement dynamic weight adjustment based on query type
-- Add context-aware scoring adjustments
-- Implement results diversity scoring
-- Add support for semantic filters
-- Implement approximate nearest neighbor search
-
-### 3. Result Processing
-The result processing phase enriches raw search results with additional context and relationships from our knowledge graph. This enrichment provides users with a more complete understanding of the information by including related entities, their descriptions, and interconnections. The process ensures that users receive not just matching text, but a rich context around their query.
-
+### 3. Result Enhancement
 - **Entity Enrichment**:
-  - Adds relevant entities to search results
-  - Includes entity metadata and descriptions
-  - Maps relationships between entities
+  - Entity extraction for each result
+  - Entity metadata inclusion
+  - Category-based organization
+
+- **Relationship Mapping**:
+  - Entity relationship discovery
+  - Graph-based context addition
+  - Relationship type classification
 
 - **Response Generation**:
   - Context-aware prompt construction
-  - Incorporates search results and entity relationships
-  - Structured output with citations
-  - Confidence scoring for responses
+  - Configurable model selection (OpenAI/Groq)
+  - Citation and source tracking
+  - Confidence scoring
 
-**TODO - Potential Improvements**:
-- Add result clustering by topic
-- Implement hierarchical result organization
-- Add relevance feedback mechanism
-- Enhance citation accuracy
-- Implement answer validation
+### 4. Performance Optimizations
+- Early exit for high-confidence matches
+- Batch processing for embeddings
+- Efficient SQL query construction
+- Score-based result filtering
+- Caching of intermediate results
 
-### 4. API Layer (`api.py`)
-The API layer provides a clean and efficient interface for accessing our knowledge base. It implements RESTful endpoints that handle various types of queries and return well-structured responses. The API design focuses on flexibility and extensibility while maintaining consistent response formats and error handling.
+### 5. Configuration
+All aspects of the retrieval process are configurable through YAML:
+- Model selection and parameters
+- Search weights and thresholds
+- Result limits and scoring
+- Response generation settings
 
-- **Endpoints**:
-  - `/kag-search`: Main search endpoint
-  - Parameters: query, top_k, debug
-  - Returns: SearchResponse with results, scores, and generated response
-
-**TODO - Potential Improvements**:
-- Add request rate limiting
-- Implement response compression
-- Add batch query support
-- Implement async processing for large queries
-- Add response streaming for large results
-
-### 5. Response Models (`models.py`)
-Our response models are designed to provide structured and consistent data formats for all API responses. They ensure type safety and data validation while maintaining flexibility for different types of search results and their associated metadata.
-
-- **SearchResponse**:
-  - Query text
-  - List of SearchResults
-  - Generated response
-  - Execution time
-  
-- **SearchResult**:
-  - Document content
-  - Vector and text scores
-  - Combined score
-  - Related entities and relationships
-
-**TODO - Potential Improvements**:
-- Add response versioning support
-- Implement partial response options
-- Add response schema validation
-- Enhance error reporting granularity
-- Add support for custom response formats
+This implementation ensures:
+1. High accuracy through hybrid search
+2. Fast retrieval via optimized indexes
+3. Rich context through entity relationships
+4. Flexible configuration for different use cases
