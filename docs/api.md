@@ -152,12 +152,12 @@ Search documents using natural language queries.
 
 ### Knowledge Base
 
-#### Get Knowledge Base Data
+#### Get Knowledge Base Statistics
 ```http
 GET /kbdata
 ```
 
-Get statistics and information about the knowledge base.
+Retrieve statistics about the knowledge base and specific documents.
 
 **Response:**
 ```json
@@ -166,7 +166,7 @@ Get statistics and information about the knowledge base.
   "total_chunks": "integer",
   "total_entities": "integer",
   "total_relationships": "integer",
-  "document_stats": [
+  "documents": [
     {
       "doc_id": "integer",
       "title": "string",
@@ -178,8 +178,10 @@ Get statistics and information about the knowledge base.
 }
 ```
 
+Note: Entity counts are based on entities that have relationships within each document. An entity is considered part of a document if it appears in any relationship (as source or target) associated with that document.
+
 **Status Codes:**
-- `200 OK`: Data retrieved successfully
+- `200 OK`: Statistics retrieved successfully
 - `500 Internal Server Error`: Server error
 
 #### Get Graph Data

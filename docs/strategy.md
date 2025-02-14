@@ -97,6 +97,28 @@ Our database storage strategy is optimized for both performance and flexibility.
 - Add support for versioned embeddings
 - Implement automated index maintenance
 
+## Database Structure and Queries
+
+### Entity-Document Relationships
+- Entities are stored in the `Entities` table with their core attributes
+- Document-Entity relationships are tracked through the `Relationships` table
+- Each relationship links:
+  - Source entity (source_entity_id)
+  - Target entity (target_entity_id)
+  - Document context (doc_id)
+  - Relationship type
+
+### Statistics Computation
+- Document chunks are counted from distinct `embedding_id`s in `Document_Embeddings`
+- Entity counts per document are derived from relationships where the entity appears as source or target
+- Relationship counts are directly queried from the `Relationships` table by `doc_id`
+
+This structure ensures:
+- Clean separation of entity definitions from their document contexts
+- Accurate tracking of entity appearances across documents
+- Efficient querying of document-specific statistics
+- Proper handling of entity relationships and their document context
+
 ## Section 2 - Knowledge Retrieval
 
 The retrieval process handles user queries and returns relevant information using a hybrid search approach.

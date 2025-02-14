@@ -35,6 +35,11 @@ A full-stack application that processes documents to create semantic embeddings 
 
 ## Version History
 
+### v2.0.1 (2025-02-14)
+- Fixed document statistics retrieval by correctly handling entity-document relationships
+- Improved database query structure for accurate entity and relationship counting
+- Enhanced stability of knowledge base statistics endpoint
+
 ### v2.0.0 (2025-02-13)
 - Complete UI redesign with modern aesthetics
 - New unified dashboard layout with statistics and search
