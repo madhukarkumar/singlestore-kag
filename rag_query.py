@@ -345,24 +345,25 @@ class RAGQueryEngine:
         try:
             prompt = self._build_prompt(query, context)
             
-            # Get model from env or config
+            # Get model from config or env
             model = os.getenv("RESPONSE_GENERATION_MODEL") or self.response_config.get('model', 'gpt-3.5-turbo')
+            logger.info(f"Using model: {model}")
             
-            # Create API parameters
+            # Get model-specific configuration
+            model_config = self.response_config.get('model_config', {}).get(model, {})
+            
+            # Create API parameters with model-specific or default values
             api_params = {
                 "model": model,
                 "messages": [
                     {"role": "system", "content": "You are a helpful assistant that answers questions based on the provided context."},
                     {"role": "user", "content": prompt}
-                ]
+                ],
+                "temperature": model_config.get('temperature', self.response_config.get('temperature', 0.3)),
+                "max_tokens": model_config.get('max_tokens', self.response_config.get('max_tokens', 1500))
             }
             
-            # Add model-specific parameters
-            if 'o3-' in model:
-                api_params["max_completion_tokens"] = self.response_config['max_tokens']
-            else:
-                api_params["max_tokens"] = self.response_config['max_tokens']
-                api_params["temperature"] = self.response_config['temperature']
+            logger.info(f"Using model configuration: temperature={api_params['temperature']}, max_tokens={api_params['max_tokens']}")
             
             response = self.openai_client.chat.completions.create(**api_params)
             
