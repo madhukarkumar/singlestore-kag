@@ -78,7 +78,7 @@ A full-stack application that processes documents to create semantic embeddings 
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    
    # Install dependencies
-   pip install -r requirements.txt
+   pip install -r backend/requirements.txt
    ```
 
 2. **Environment Configuration**
@@ -97,7 +97,7 @@ A full-stack application that processes documents to create semantic embeddings 
 3. **Database Setup**
    ```bash
    # Initialize SingleStore schema
-   mysql -h <host> -u <user> -p <database> < schema.sql
+   mysql -h <host> -u <user> -p <database> < backend/db/schema.sql
    ```
 
 4. **Start Backend Services**
@@ -128,6 +128,32 @@ A full-stack application that processes documents to create semantic embeddings 
    pnpm dev
    # Frontend will be available at http://localhost:3000
    ```
+
+## Project Structure
+
+```
+singlestore-kag/
+├── backend/               # Backend application code
+│   ├── api.py            # FastAPI endpoints
+│   ├── db.py             # Database operations
+│   ├── knowledge_graph.py # Knowledge graph generation
+│   ├── pdf_processor.py  # PDF processing logic
+│   ├── rag_query.py      # RAG implementation
+│   ├── tasks.py          # Celery task definitions
+│   ├── models.py         # Data models
+│   ├── config.yaml       # Application configuration
+│   └── requirements.txt  # Python dependencies
+│
+├── frontend/             # Next.js frontend application
+│   ├── components/       # React components
+│   ├── pages/           # Next.js pages
+│   ├── styles/          # CSS and styling
+│   └── package.json     # Frontend dependencies
+│
+└── docs/                # Documentation
+    ├── api.md           # API documentation
+    └── strategy.md      # Implementation strategy
+```
 
 ## System Architecture
 
@@ -326,19 +352,6 @@ Contributions are welcome! Please read our contributing guidelines before submit
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Project Structure
-
-```
-singlestore-kag/
-├── api.py              # FastAPI endpoints
-├── rag_query.py        # RAG implementation
-├── models.py           # Shared Pydantic models
-├── db.py              # Database connection
-├── docs/              # Documentation
-├── frontend/          # Next.js frontend
-└── requirements.txt   # Python dependencies
-```
 
 ## Environment Variables
 
