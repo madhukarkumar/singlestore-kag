@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Spinner } from '../../components/Spinner';
 import KnowledgeGraph from '../../components/KnowledgeGraph';
 import NavHeader from '@/components/NavHeader';
+import { api } from '../../utils/api';
 
 interface DocumentStats {
   doc_id: number;
@@ -38,11 +39,7 @@ export default function KBPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch('http://localhost:8000/kbdata');
-        if (!response.ok) {
-          throw new Error('Failed to fetch KB data');
-        }
-        const result: KBDataResponse = await response.json();
+        const result = await api.get<KBDataResponse>('kbData');
         setData(result.stats);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred');

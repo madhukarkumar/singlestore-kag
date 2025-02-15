@@ -3,8 +3,13 @@
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { ProcessingStatus } from './ProcessingStatus';
+import { fetchWithAuth } from '../utils/api';
 
-export default function UploadForm() {
+interface UploadFormProps {
+  onUploadComplete?: () => void;
+}
+
+export default function UploadForm({ onUploadComplete }: UploadFormProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,13 +69,16 @@ export default function UploadForm() {
 
     setUploading(true);
     setError(null);
-
-    const formData = new FormData();
-    formData.append('file', file);
-
+    
     try {
-      const response = await fetch('http://localhost:8000/upload', {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetchWithAuth('/upload-pdf', {
         method: 'POST',
+        headers: {
+          'X-API-Key': process.env.NEXT_PUBLIC_API_KEY || '',
+        },
         body: formData,
       });
 
@@ -80,12 +88,13 @@ export default function UploadForm() {
 
       const data = await response.json();
       setTaskId(data.task_id);
+      onUploadComplete?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setUploading(false);
     }
-  }, [file]);
+  }, [file, onUploadComplete]);
 
   const handleProcessingComplete = useCallback(() => {
     router.push('/kb');

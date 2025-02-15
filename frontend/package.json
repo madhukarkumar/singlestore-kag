@@ -13,6 +13,7 @@
     "next": "15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-force-graph": "^1.47.3",
     "react-force-graph-2d": "^1.25.3",
     "spinner": "^0.3.4"
   },

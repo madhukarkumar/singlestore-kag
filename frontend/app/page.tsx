@@ -6,6 +6,7 @@ import KnowledgeGraph from '../components/KnowledgeGraph';
 import SearchForm from '../components/SearchForm';
 import { ProcessingStatus } from '../components/ProcessingStatus';
 import NavHeader from '@/components/NavHeader';
+import { fetchWithAuth } from '../utils/api';
 
 interface DocumentStats {
   doc_id: number;
@@ -36,12 +37,11 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<KBStats | null>(null);
-  const [uploadingFile, setUploadingFile] = useState(false);
   const [taskId, setTaskId] = useState<string | null>(null);
 
   const fetchKBData = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:8000/kbdata');
+      const response = await fetchWithAuth('/kbdata');
       if (!response.ok) {
         throw new Error('Failed to fetch KB data');
       }
@@ -62,12 +62,11 @@ export default function HomePage() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    setUploadingFile(true);
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-      const response = await fetch('http://localhost:8000/upload-pdf', {
+      const response = await fetchWithAuth('/upload-pdf', {
         method: 'POST',
         body: formData,
       });
@@ -91,7 +90,7 @@ export default function HomePage() {
           {/* Left Column */}
           <div className="space-y-8">
             {/* Stats Section */}
-            <section className="bg-white rounded-twisty-lg p-6 shadow-twisty-md">
+            <section className="bg-white rounded-twisty-lg p-6 shadow-twisty-md shadow-xl">
               <h2 className="text-twisty-xl font-twisty font-semibold text-twisty-secondary mb-6">
                 Knowledge Base Statistics
               </h2>
@@ -132,7 +131,7 @@ export default function HomePage() {
             </section>
 
             {/* Documents Section */}
-            <section className="bg-white rounded-twisty-lg p-6 shadow-twisty-md">
+            <section className="bg-white rounded-twisty-lg p-6 shadow-twisty-md shadow-xl">
               <h2 className="text-twisty-xl font-twisty font-semibold text-twisty-secondary mb-6">
                 Documents
               </h2>
@@ -197,7 +196,7 @@ export default function HomePage() {
             </section>
 
             {/* Upload Section */}
-            <section className="bg-white rounded-twisty-lg p-6 shadow-twisty-md">
+            <section className="bg-white rounded-twisty-lg p-6 shadow-twisty-md shadow-xl">
               <h2 className="text-twisty-xl font-twisty font-semibold text-twisty-secondary mb-6">
                 Upload Document
               </h2>
@@ -224,7 +223,7 @@ export default function HomePage() {
           {/* Right Column */}
           <div className="space-y-8">
             {/* Search Section */}
-            <section className="bg-white rounded-twisty-lg p-6 shadow-twisty-md">
+            <section className="bg-white rounded-twisty-lg p-6 shadow-twisty-md shadow-xl">
               <h2 className="text-twisty-xl font-twisty font-semibold text-twisty-secondary mb-6">
                 Ask Knowledge Base
               </h2>
@@ -232,11 +231,11 @@ export default function HomePage() {
             </section>
 
             {/* Knowledge Graph Section */}
-            <section className="bg-white rounded-lg p-6 shadow-md">
+            <section className="bg-white rounded-lg p-6 shadow-xl">
               <h2 className="text-xl font-semibold text-gray-800 mb-4">
                 Knowledge Graph
               </h2>
-              <div className="h-[500px]">
+              <div className="h-[600px] overflow-hidden">
                 <KnowledgeGraph />
               </div>
             </section>

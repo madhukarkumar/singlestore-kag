@@ -1,2 +1,2 @@
 - [x] Reorganize into frontend and backend
-- [ ] Deploy backend to replit
+- [ ] Deploy backend to railway

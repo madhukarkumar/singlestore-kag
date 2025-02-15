@@ -43,7 +43,7 @@ const Tab = ({
   href,
 }: {
   children: React.ReactNode;
-  setPosition: any;
+  setPosition: (position: { left: number; width: number; opacity: number }) => void;
   href: string;
 }) => {
   const ref = useRef<HTMLLIElement>(null);
@@ -67,7 +67,7 @@ const Tab = ({
   );
 };
 
-function Cursor({ position }: { position: any }) {
+function Cursor({ position }: { position: { left: number; width: number; opacity: number } }) {
   return (
     <motion.div
       className="absolute inset-0 z-0 rounded-full bg-black"

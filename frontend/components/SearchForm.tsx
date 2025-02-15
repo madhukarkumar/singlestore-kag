@@ -1,24 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState, ReactElement } from 'react';
+import { fetchWithAuth } from '../utils/api';
 
 interface SearchResult {
-  doc_id: number;
   content: string;
   vector_score: number;
   text_score: number;
   combined_score: number;
+  doc_id: number;
   entities: Array<{
-    entity_id: number;
     name: string;
-    category: string;
-    description?: string;
-  }>;
-  relationships: Array<{
-    source_entity_id: number;
-    target_entity_id: number;
-    relation_type: string;
-    metadata?: Record<string, any>;
+    type: string;
+    description: string;
   }>;
 }
 
@@ -29,7 +23,7 @@ interface SearchResponse {
   execution_time: number;
 }
 
-export default function SearchForm() {
+export default function SearchForm(): ReactElement {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,15 +40,14 @@ export default function SearchForm() {
     setResponse(null);
 
     try {
-      const response = await fetch('http://localhost:8000/kag-search', {
+      setLoading(true);
+      const searchData = { query: query.trim(), top_k: 5 };
+      const response = await fetchWithAuth('/kag-search', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          query: query.trim(),
-          top_k: 5,
-        }),
+        body: JSON.stringify(searchData),
       });
 
       if (!response.ok) {
@@ -151,25 +144,72 @@ export default function SearchForm() {
                   <div className="bg-twisty-gray-50 p-6 rounded-twisty-md">
                     <h3 className="font-semibold mb-4 text-twisty-xl">AI Response</h3>
                     <div className="prose prose-sm max-w-none text-twisty-gray-700 whitespace-pre-wrap leading-relaxed">
-                      {response.generated_response.split('\n\n').map((paragraph, index) => (
-                        <div key={index} className="mb-4">
-                          {paragraph.split('\n').map((line, lineIndex) => (
-                            <div key={lineIndex}>
-                              {line.startsWith('- ') ? (
-                                <ul className="list-disc ml-4 my-2">
-                                  <li>{line.substring(2)}</li>
-                                </ul>
-                              ) : line.match(/^\d+\.\s/) ? (
-                                <ol className="list-decimal ml-4 my-2">
-                                  <li>{line.substring(line.indexOf(' ') + 1)}</li>
-                                </ol>
-                              ) : (
-                                line
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      ))}
+                      {response.generated_response.split('\n\n').map((paragraph, index) => {
+                        const lines = paragraph.split('\n');
+                        let currentList: string[] = [];
+                        let isOrderedList = false;
+                        
+                        return (
+                          <div key={index} className="mb-4">
+                            {lines.reduce((acc: ReactElement[], line, lineIndex) => {
+                              const isBulletPoint = line.startsWith('- ');
+                              const isNumberedPoint = line.match(/^\d+\.\s/);
+                              
+                              if (isBulletPoint || isNumberedPoint) {
+                                const content = isBulletPoint ? line.substring(2) : line.substring(line.indexOf(' ') + 1);
+                                if (currentList.length === 0) {
+                                  isOrderedList = !!isNumberedPoint;
+                                }
+                                currentList.push(content);
+                              } else {
+                                if (currentList.length > 0) {
+                                  acc.push(
+                                    <div key={`list-${lineIndex}`}>
+                                      {isOrderedList ? (
+                                        <ol className="list-decimal ml-4 my-2">
+                                          {currentList.map((item, i) => (
+                                            <li key={i}>{item}</li>
+                                          ))}
+                                        </ol>
+                                      ) : (
+                                        <ul className="list-disc ml-4 my-2">
+                                          {currentList.map((item, i) => (
+                                            <li key={i}>{item}</li>
+                                          ))}
+                                        </ul>
+                                      )}
+                                    </div>
+                                  );
+                                  currentList = [];
+                                }
+                                acc.push(<div key={`text-${lineIndex}`}>{line}</div>);
+                              }
+                              
+                              if (lineIndex === lines.length - 1 && currentList.length > 0) {
+                                acc.push(
+                                  <div key={`list-end-${lineIndex}`}>
+                                    {isOrderedList ? (
+                                      <ol className="list-decimal ml-4 my-2">
+                                        {currentList.map((item, i) => (
+                                          <li key={i}>{item}</li>
+                                        ))}
+                                      </ol>
+                                    ) : (
+                                      <ul className="list-disc ml-4 my-2">
+                                        {currentList.map((item, i) => (
+                                          <li key={i}>{item}</li>
+                                        ))}
+                                      </ul>
+                                    )}
+                                  </div>
+                                );
+                              }
+                              
+                              return acc;
+                            }, [])}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

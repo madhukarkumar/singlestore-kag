@@ -1,26 +1,26 @@
 'use client';
 
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { Spinner } from '@/components/Spinner';
+import { fetchWithAuth } from '../utils/api';
+import { ForceGraphMethods } from 'react-force-graph-2d';
 
-// Dynamically import ForceGraph2D directly
+// Import ForceGraph2D with no SSR
 const ForceGraph2D = dynamic(
-  () => import('react-force-graph-2d'),
-  {
-    ssr: false,
-    loading: () => <Spinner />
-  }
+  () => import('react-force-graph-2d').then(mod => mod.default),
+  { ssr: false }
 );
 
+// Base node type from API
 interface GraphNode {
   id: string;
   name: string;
   category: string;
-  group: number;
   val: number;
 }
 
+// Base link type from API
 interface GraphLink {
   source: string;
   target: string;
@@ -28,9 +28,24 @@ interface GraphLink {
   value: number;
 }
 
+// Graph data structure from API
 interface GraphData {
   nodes: GraphNode[];
   links: GraphLink[];
+}
+
+// Runtime link type with node references
+interface RuntimeLink {
+  source: GraphNode;
+  target: GraphNode;
+  type: string;
+  value: number;
+}
+
+// Runtime graph data structure
+interface RuntimeGraphData {
+  nodes: GraphNode[];
+  links: RuntimeLink[];
 }
 
 interface GraphResponse {
@@ -40,126 +55,70 @@ interface GraphResponse {
 
 export default function KnowledgeGraph() {
   const [graphData, setGraphData] = useState<GraphData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [runtimeData, setRuntimeData] = useState<RuntimeGraphData | null>(null);
   const [loading, setLoading] = useState(true);
-  const graphRef = useRef<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
+  const fgRef = useRef<ForceGraphMethods>(null!);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
-  const [activeCategories, setActiveCategories] = useState<Set<string>>(new Set());
-  const [highlightLinks, setHighlightLinks] = useState<Set<string>>(new Set());
-  const [graphZoomLevel, setGraphZoomLevel] = useState<number>(1);
-
-  // Color scale for different entity categories
-  const categoryColors = [
-    '#4f46e5', // indigo-600
-    '#0891b2', // cyan-600
-    '#0d9488', // teal-600
-    '#059669', // emerald-600
-    '#16a34a', // green-600
-    '#ca8a04', // yellow-600
-    '#dc2626', // red-600
-    '#9333ea', // purple-600
-    '#2563eb', // blue-600
-    '#db2777', // pink-600
-  ];
-
-  useEffect(() => {
-    if (graphRef.current && graphData) {
-      // Center the graph
-      graphRef.current.centerAt(0, 0);
-      graphRef.current.zoom(1.5);
-
-      // Configure forces
-      graphRef.current.d3Force('charge').strength(-100);
-      graphRef.current.d3Force('center').strength(1);
-      graphRef.current.d3Force('link').distance(50);
-    }
-  }, [graphData]);
-
-  const handleNodeClick = (node: GraphNode) => {
-    setSelectedNode(node === selectedNode ? null : node);
-    if (node) {
-      // Highlight connected links
-      const connectedLinks = new Set(
-        graphData?.links
-          .filter(link => link.source === node.id || link.target === node.id)
-          .map(link => `${link.source}-${link.target}`)
-      );
-      setHighlightLinks(connectedLinks);
-    } else {
-      setHighlightLinks(new Set());
-    }
-  };
-
-  const handleCategoryToggle = (category: string) => {
-    setActiveCategories(prev => {
-      const newCategories = new Set(prev);
-      if (newCategories.has(category)) {
-        newCategories.delete(category);
-      } else {
-        newCategories.add(category);
-      }
-      return newCategories;
-    });
-  };
-
-  const processedData = useMemo(() => {
-    if (!graphData) return { nodes: [], links: [] };
-    
-    console.log('Processing graph data:', { 
-      originalNodes: graphData.nodes.length,
-      originalLinks: graphData.links.length 
-    });
-    
-    // Filter nodes by active categories
-    const filteredNodes = graphData.nodes.filter(node => 
-      activeCategories.has(node.category)
-    );
-    
-    // Create a set of valid node IDs
-    const validNodeIds = new Set(filteredNodes.map(node => node.id));
-    
-    // Filter and process links
-    const filteredLinks = graphData.links.filter(link => {
-      const sourceValid = validNodeIds.has(link.source);
-      const targetValid = validNodeIds.has(link.target);
-      return sourceValid && targetValid;
-    });
-
-    console.log('Processed graph data:', {
-      filteredNodes: filteredNodes.length,
-      filteredLinks: filteredLinks.length,
-      sampleLink: filteredLinks[0],
-      validNodeIds: Array.from(validNodeIds).slice(0, 5)
-    });
-
-    return {
-      nodes: filteredNodes,
-      links: filteredLinks.map(link => ({
-        ...link,
-        source: String(link.source),
-        target: String(link.target)
-      }))
-    };
-  }, [graphData, activeCategories]);
+  const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
   useEffect(() => {
     const fetchGraphData = async () => {
       try {
-        const response = await fetch('http://localhost:8000/graph-data');
+        const response = await fetchWithAuth('/graph-data');
         if (!response.ok) {
           throw new Error('Failed to fetch graph data');
         }
         const data: GraphResponse = await response.json();
-        console.log('Raw graph data:', data.data);
-        setGraphData(data.data);
-        // Initialize active categories
-        if (data.data.nodes.length > 0) {
-          const categories = new Set(data.data.nodes.map(node => node.category));
-          setActiveCategories(categories);
+        console.log('Raw response:', response.status);
+        console.log('Full data object:', data);
+        console.log('Graph data:', data.data);
+        
+        if (!data.data || !data.data.nodes || !data.data.links) {
+          throw new Error('Invalid graph data format');
         }
+
+        // Debug raw link data
+        console.log('Raw links before processing:', data.data.links[0]);
+        
+        // Process links to ensure source/target are references to node objects
+        const processedData: GraphData = {
+          nodes: data.data.nodes,
+          links: data.data.links
+        };
+
+        // Create runtime data with node references
+        const nodesById = Object.fromEntries(
+          data.data.nodes.map(node => [node.id, node])
+        );
+        
+        const runtimeProcessedData: RuntimeGraphData = {
+          nodes: processedData.nodes,
+          links: processedData.links.map(link => ({
+            ...link,
+            source: nodesById[link.source],
+            target: nodesById[link.target]
+          }))
+        };
+
+        // Debug nodes map
+        console.log('Nodes by ID:', nodesById);
+        
+        // Debug processed link data
+        console.log('Processed links example:', runtimeProcessedData.links[0]);
+        
+        // Extract unique categories from nodes
+        const uniqueCategories = Array.from(new Set(data.data.nodes.map(node => node.category)));
+        console.log('Extracted categories:', uniqueCategories);
+
+        setGraphData(processedData);
+        setRuntimeData(runtimeProcessedData);
+        setCategories(uniqueCategories);
+        setSelectedCategories(new Set(uniqueCategories));
       } catch (err) {
+        console.error('Error fetching graph data:', err); // Debug log
         setError(err instanceof Error ? err.message : 'An error occurred');
       } finally {
         setLoading(false);
@@ -169,94 +128,174 @@ export default function KnowledgeGraph() {
     fetchGraphData();
   }, []);
 
+  // Handle window resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (containerRef.current) {
+        const { clientWidth, clientHeight } = containerRef.current;
+        setDimensions({ width: clientWidth, height: clientHeight });
+      }
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-96">
+        <Spinner />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-red-500 text-center p-4">
+        Error: {error}
+      </div>
+    );
+  }
+
+  if (!graphData || !runtimeData || categories.length === 0) {
+    console.log('Render condition failed:', { graphData, categoriesLength: categories.length });
+    return (
+      <div className="text-gray-500 text-center p-4">
+        No graph data available
+      </div>
+    );
+  }
+
+  const filteredData = {
+    nodes: graphData.nodes.filter(node => selectedCategories.has(node.category)),
+    links: runtimeData.links.filter(link => {
+      // Debug link filtering
+      console.log('Filtering link:', {
+        link,
+        sourceNode: link.source,
+        targetNode: link.target,
+        sourceCategory: link.source?.category,
+        targetCategory: link.target?.category
+      });
+      
+      // Check if both source and target nodes exist and their categories are selected
+      return link.source && 
+             link.target && 
+             selectedCategories.has(link.source.category) && 
+             selectedCategories.has(link.target.category);
+    })
+  };
+
+  // Debug filtered results
+  console.log('Filtering results:', {
+    totalNodes: graphData.nodes.length,
+    totalLinks: graphData.links.length,
+    filteredNodes: filteredData.nodes.length,
+    filteredLinks: filteredData.links.length,
+    selectedCategories: Array.from(selectedCategories)
+  });
+
+  // Debug filtered data before rendering
+  console.log('Filtered data before render:', {
+    nodeCount: filteredData.nodes.length,
+    linkCount: filteredData.links.length,
+    sampleLink: filteredData.links[0],
+    sampleNode: filteredData.nodes[0]
+  });
+
   return (
-    <div ref={containerRef} className="relative w-full h-full">
-      {loading && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <Spinner />
+    <div ref={containerRef} className="w-full h-[600px] relative border rounded-lg overflow-hidden">
+      {categories.length > 0 && (
+        <div className="absolute top-4 right-4 z-10 bg-white p-4 rounded-lg shadow-md">
+          <h3 className="text-sm font-medium mb-2">Filter by Category</h3>
+          <div className="space-y-2">
+            {categories.map(category => (
+              <label key={category} className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={selectedCategories.has(category)}
+                  onChange={() => {
+                    const newSelected = new Set(selectedCategories);
+                    if (newSelected.has(category)) {
+                      newSelected.delete(category);
+                    } else {
+                      newSelected.add(category);
+                    }
+                    setSelectedCategories(newSelected);
+                  }}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span className="text-sm text-gray-700">{category}</span>
+              </label>
+            ))}
+          </div>
         </div>
       )}
-      {error && (
-        <div className="text-red-600">{error}</div>
-      )}
-      {graphData && !error && (
-        <div className="absolute inset-0">
-          <ForceGraph2D
-            ref={graphRef}
-            graphData={processedData}
-            width={containerRef.current?.clientWidth}
-            height={containerRef.current?.clientHeight}
-            nodeLabel="name"
-            nodeColor={node => {
-              const color = categoryColors[
-                Array.from(new Set(graphData.nodes.map(n => n.category)))
-                  .indexOf(node.category) % categoryColors.length
-              ];
-              return selectedNode ? 
-                (selectedNode.id === node.id ? color : `${color}66`) : 
-                color;
-            }}
-            nodeVal={node => node.val * (selectedNode?.id === node.id ? 1.5 : 1)}
-            linkSource="source"
-            linkTarget="target"
-            linkLabel={link => link.type}
-            linkColor={() => '#4f46e5'}
-            linkWidth={2}
-            linkDirectionalParticles={4}
-            linkDirectionalParticleWidth={2}
-            linkDirectionalParticleSpeed={0.005}
-            linkDirectionalParticleColor={() => '#4f46e5'}
-            linkCurvature={0.1}
-            cooldownTicks={100}
-            d3VelocityDecay={0.3}
-            onNodeClick={handleNodeClick}
-            minZoom={0.5}
-            maxZoom={4}
-            onEngineStop={() => {
-              if (graphRef.current) {
-                graphRef.current.zoomToFit(400, 50);
-              }
-            }}
-            nodeCanvasObject={(node, ctx, globalScale) => {
-              const label = node.name;
-              const fontSize = 12/globalScale;
-              const nodeColor = categoryColors[
-                Array.from(new Set(graphData.nodes.map(n => n.category)))
-                  .indexOf(node.category) % categoryColors.length
-              ];
-              
-              // Draw circle
-              ctx.beginPath();
-              ctx.fillStyle = nodeColor;
-              const size = 4 / globalScale;  // Fixed 4px radius (8px diameter)
-              ctx.arc(node.x, node.y, size, 0, 2 * Math.PI);
-              ctx.fill();
-              
-              // Draw label
-              ctx.font = `${fontSize}px Inter, system-ui, -apple-system, sans-serif`;
-              const textWidth = ctx.measureText(label).width;
-              const bckgDimensions = [textWidth, fontSize].map(n => n + fontSize * 0.2);
 
-              // Position label below the circle
-              const labelY = node.y + size + fontSize/2;
-              
-              ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-              ctx.fillRect(
-                node.x - bckgDimensions[0] / 2,
-                labelY - bckgDimensions[1] / 2,
-                ...bckgDimensions
-              );
-
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'middle';
-              ctx.fillStyle = selectedNode && selectedNode.id !== node.id ? 
-                '#666' : 
-                nodeColor;
-              ctx.fillText(label, node.x, labelY);
-            }}
-          />
-        </div>
-      )}
+      <ForceGraph2D
+        ref={fgRef}
+        graphData={filteredData}
+        nodeLabel={node => {
+          const n = node as GraphNode;
+          return `${n.name}\nCategory: ${n.category}`;
+        }}
+        width={dimensions.width}
+        height={dimensions.height}
+        nodeColor={node => {
+          const n = node as GraphNode;
+          if (!selectedCategories.has(n.category)) return '#E2E8F0';
+          // Use category-based colors
+          switch (n.category.toLowerCase()) {
+            case 'person': return '#4299E1';  // blue
+            case 'organization': return '#48BB78';  // green
+            case 'location': return '#F6AD55';  // orange
+            case 'event': return '#F687B3';  // pink
+            case 'concept': return '#9F7AEA';  // purple
+            default: return '#718096';  // gray
+          }
+        }}
+        nodeRelSize={4}
+        nodeVal={node => {
+          const n = node as GraphNode;
+          return Math.sqrt(n.val * 100) + 1;  // Scale node size based on connections
+        }}
+        linkWidth={2}
+        linkColor={() => '#999'}
+        linkDirectionalParticles={1}
+        linkDirectionalParticleSpeed={0.005}
+        linkDirectionalArrowLength={3.5}
+        linkDirectionalArrowRelPos={0.5}
+        cooldownTicks={100}
+        onEngineStop={() => {
+          if (fgRef.current) {
+            fgRef.current.zoomToFit(400, 100); // Increased padding
+          }
+        }}
+        nodeCanvasObject={(node, ctx, globalScale) => {
+          const n = node as GraphNode;
+          const label = n.name;
+          const fontSize = Math.max(14/globalScale, 1.5);  // Ensure minimum readable size
+          ctx.font = `${fontSize}px Sans-Serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          
+          // Draw background for better readability
+          const textWidth = ctx.measureText(label).width;
+          const bckgDimensions = [textWidth, fontSize].map(n => n + fontSize * 0.2);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+          ctx.fillRect(
+            node.x! - bckgDimensions[0] / 2,
+            node.y! - bckgDimensions[1] / 2,
+            bckgDimensions[0],
+            bckgDimensions[1]
+          );
+          
+          // Draw text
+          ctx.fillStyle = selectedCategories.has(n.category) ? '#2D3748' : '#A0AEC0';
+          ctx.fillText(label, node.x!, node.y!);
+        }}
+      />
     </div>
   );
 }

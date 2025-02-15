@@ -1,4 +1,7 @@
+'use client';
+
 import React, { useEffect, useState } from 'react';
+import { api } from '../utils/api';
 
 interface ProcessingStatusProps {
   taskId: string;
@@ -8,7 +11,7 @@ interface ProcessingStatusProps {
 
 interface TaskStatus {
   task_id: string;
-  status: string;
+  status: 'SUCCESS' | 'FAILURE' | 'STARTED' | 'PROCESSING';
   message: string;
   current?: number;
   total?: number;
@@ -26,11 +29,7 @@ export const ProcessingStatus: React.FC<ProcessingStatusProps> = ({
   useEffect(() => {
     const checkStatus = async () => {
       try {
-        const response = await fetch(`/api/task-status/${taskId}`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch status');
-        }
-        const data = await response.json();
+        const data = await api.get<TaskStatus>('taskStatus', { taskId });
         setStatus(data);
         
         // If processing is complete, stop polling and call onComplete
@@ -107,71 +106,40 @@ export const ProcessingStatus: React.FC<ProcessingStatusProps> = ({
     }
   };
 
-  const getStatusMessage = (status: string) => {
+  const getStatusText = (status: string) => {
     switch (status) {
       case 'SUCCESS':
-        return 'Processing completed successfully!';
+        return 'Processing Complete';
       case 'FAILURE':
-        return 'Processing failed. Please try again.';
+        return 'Processing Failed';
       case 'STARTED':
-        return 'Starting PDF processing...';
+        return 'Processing Started';
       case 'PROCESSING':
-        return status.message || 'Processing your PDF...';
+        return 'Processing...';
       default:
-        return 'Waiting to start processing...';
+        return 'Unknown Status';
     }
   };
 
-  const progress = status.current && status.total 
-    ? Math.round((status.current / status.total) * 100)
-    : null;
-
   return (
-    <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-      <div className="px-4 py-5 sm:p-6">
-        <h3 className="text-lg leading-6 font-medium text-gray-900">
-          Processing Status
-        </h3>
-        <div className="mt-2 max-w-xl text-sm text-gray-500">
-          <p className="font-medium">{getStatusMessage(status.status)}</p>
-          {status.message && status.message !== getStatusMessage(status.status) && (
-            <p className="mt-1 text-sm">{status.message}</p>
-          )}
-        </div>
-        {['STARTED', 'PROCESSING'].includes(status.status) && (
-          <div className="mt-4">
-            <div className="relative pt-1">
-              <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-gray-200">
-                {progress !== null ? (
-                  <div 
-                    style={{ width: `${progress}%` }}
-                    className={`shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center ${getStatusColor(status.status)}`}
-                  />
-                ) : (
-                  <div className="animate-pulse w-full h-full bg-blue-500" />
-                )}
-              </div>
-              {progress !== null && (
-                <div className="text-right">
-                  <span className="text-sm font-semibold inline-block text-blue-600">
-                    {progress}%
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-        {status.status === 'SUCCESS' && (
-          <div className="mt-4">
-            <div className="flex items-center text-green-600">
-              <svg className="h-5 w-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-              </svg>
-              <span>Complete!</span>
-            </div>
-          </div>
-        )}
+    <div className="space-y-4">
+      <div className="flex items-center space-x-2">
+        <div className={`h-2.5 w-2.5 rounded-full ${getStatusColor(status.status)}`}></div>
+        <span className="text-sm font-medium text-gray-900">
+          {getStatusText(status.status)}
+        </span>
       </div>
+      {status.message && (
+        <p className="text-sm text-gray-500">{status.message}</p>
+      )}
+      {status.current !== undefined && status.total !== undefined && (
+        <div className="w-full bg-gray-200 rounded-full h-2.5">
+          <div
+            className="bg-blue-600 h-2.5 rounded-full"
+            style={{ width: `${(status.current / status.total) * 100}%` }}
+          ></div>
+        </div>
+      )}
     </div>
   );
 };

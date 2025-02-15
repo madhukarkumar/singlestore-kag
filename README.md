@@ -286,6 +286,138 @@ The system uses a sophisticated document processing pipeline:
      ```
    - This prevents graph overflow and ensures proper containment
 
+## API Documentation
+
+### Backend API Endpoints
+
+1. **Knowledge Base Search**
+   ```
+   POST /kag-search
+   Headers:
+     X-API-Key: KnowledgePrimeRadiant
+     Content-Type: application/json
+   Body:
+     {
+       "query": "your search query",
+       "top_k": 5  // Number of results to return
+     }
+   Response:
+     {
+       "query": "original query",
+       "results": [
+         {
+           "content": "matching text",
+           "vector_score": 0.9,
+           "text_score": 0.8,
+           "combined_score": 0.85,
+           "doc_id": 123456,
+           "entities": []
+         }
+       ],
+       "generated_response": "AI-generated summary",
+       "execution_time": 1.23
+     }
+   ```
+
+2. **Knowledge Base Statistics**
+   ```
+   GET /kbdata
+   Headers:
+     X-API-Key: KnowledgePrimeRadiant
+   Response:
+     {
+       "stats": {
+         "total_documents": 1,
+         "total_chunks": 21,
+         "total_entities": 112,
+         "total_relationships": 121,
+         "documents": [...],
+         "last_updated": "2025-02-15T15:48:57.472392"
+       },
+       "execution_time": 1.14
+     }
+   ```
+
+3. **Knowledge Graph Data**
+   ```
+   GET /graph-data
+   Headers:
+     X-API-Key: KnowledgePrimeRadiant
+   Response:
+     {
+       "data": {
+         "nodes": [...],
+         "links": [...]
+       },
+       "execution_time": 1.23
+     }
+   ```
+
+## Deployment
+
+### Frontend Deployment (Railway)
+
+1. **Environment Setup**
+   Create a `.env.local` file in the frontend directory:
+   ```env
+   NEXT_PUBLIC_API_URL=https://your-backend-url
+   NEXT_PUBLIC_API_KEY=KnowledgePrimeRadiant
+   ```
+
+2. **Build and Deploy**
+   ```bash
+   cd frontend
+   pnpm install
+   pnpm build
+   ```
+
+3. **Railway Configuration**
+   - Connect your GitHub repository
+   - Set build command: `pnpm install && pnpm build`
+   - Set start command: `pnpm start`
+   - Add environment variables in Railway dashboard
+
+### Backend Deployment (Railway)
+
+1. **Environment Variables**
+   Configure the following in Railway dashboard:
+   ```
+   OPENAI_API_KEY=your_openai_key
+   GEMINI_API_KEY=your_gemini_key
+   SINGLESTORE_HOST=your_host
+   SINGLESTORE_PORT=your_port
+   SINGLESTORE_USER=your_user
+   SINGLESTORE_PASSWORD=your_password
+   SINGLESTORE_DATABASE=your_database
+   REDIS_URL=your_redis_url
+   ```
+
+2. **Deploy**
+   - Connect your GitHub repository
+   - Set build command: `pip install -r requirements.txt`
+   - Set start command: `uvicorn api.main:app --host 0.0.0.0 --port $PORT`
+
+## Local Development
+
+1. **Start Backend**
+   ```bash
+   cd singlestore-kag-backend
+   uvicorn api.main:app --reload
+   ```
+
+2. **Start Frontend**
+   ```bash
+   cd frontend
+   pnpm install
+   pnpm dev
+   ```
+
+3. **Start Celery Worker**
+   ```bash
+   cd singlestore-kag-backend
+   celery -A api.celery_app worker --loglevel=info
+   ```
+
 ## Usage
 
 ### Document Processing
@@ -310,45 +442,6 @@ The system uses a sophisticated document processing pipeline:
    - Similarity scores
    - Extracted entities
    - Generated response
-
-## API Documentation
-
-Access the interactive API documentation at `http://localhost:8000/docs`
-
-### Key Endpoints
-
-- `POST /kag-search`: Search documents using natural language queries
-  - Parameters:
-    - `query`: Search query string
-    - `top_k`: Number of results (default: 5)
-    - `debug`: Enable debug mode (default: false)
-
-- `POST /upload-pdf`: Upload and process a PDF file
-  - Returns a task ID for tracking progress
-
-- `GET /task-status/{task_id}`: Get processing status
-  - Returns current status, progress, and any error messages
-
-- `GET /kbdata`: Retrieve knowledge base statistics
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Connection Issues**
-   - Verify SingleStore credentials in `.env`
-   - Check Redis connection for task queue
-   - Ensure all services are running (Redis, Celery, FastAPI)
-
-2. **Processing Errors**
-   - Check Celery worker logs for detailed error messages
-   - Verify PDF file is not password protected
-   - Ensure file size is under 50MB
-
-3. **Performance Issues**
-   - Monitor Redis memory usage
-   - Check SingleStore query performance
-   - Verify system resources (CPU, memory)
 
 ## Contributing
 
@@ -398,3 +491,26 @@ REDIS_URL=redis://localhost:6379/0
 - [ ] Advanced visualization
 - [ ] Query caching
 - [ ] Enhanced entity resolution
+
+## Testing backend
+# Replace YOUR_API_KEY with the actual API key from Railway environment variables
+API_KEY="YOUR_API_KEY"
+
+# Test KB Data
+curl -H "X-API-Key: $API_KEY" https://kag-backend-production.up.railway.app/kbdata
+
+# Search Documents
+curl -X POST \
+  -H "X-API-Key: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "test query", "top_k": 5}' \
+  https://kag-backend-production.up.railway.app/kag-search
+
+# Upload PDF
+curl -X POST \
+  -H "X-API-Key: $API_KEY" \
+  -F "file=@/path/to/your/document.pdf" \
+  https://kag-backend-production.up.railway.app/upload-pdf
+
+# Get Graph Data
+curl -H "X-API-Key: $API_KEY" https://kag-backend-production.up.railway.app/graph-data

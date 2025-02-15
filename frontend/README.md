@@ -1,36 +1,175 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SingleStore Knowledge Graph Frontend
+
+A modern Next.js application for visualizing and interacting with the SingleStore Knowledge Graph system.
+
+## Features
+
+- **Interactive Knowledge Graph**
+  - Force-directed graph visualization
+  - Category-based node coloring
+  - Dynamic node sizing based on connections
+  - Zoom and pan controls
+  - Node dragging and hover tooltips
+
+- **Search Interface**
+  - Natural language search
+  - AI-generated responses
+  - Relevance scoring
+  - Entity highlighting
+  - Real-time results
+
+- **Document Management**
+  - PDF upload with progress tracking
+  - Document statistics dashboard
+  - Processing status updates
+  - Error handling and recovery
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Node.js 18+
+- pnpm
+- Backend API endpoint
+
+### Environment Setup
+
+Create a `.env.local` file in the frontend directory:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000  # or your deployed backend URL on Railway
+NEXT_PUBLIC_API_KEY=exampleKey
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Installation
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+# Install dependencies
+pnpm install
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+# Start development server
+pnpm dev
+```
 
-## Learn More
+Open [http://localhost:3000](http://localhost:3000) to view the application.
 
-To learn more about Next.js, take a look at the following resources:
+## API Integration
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+The frontend communicates with the backend through the following endpoints:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. **Search API**
+   ```typescript
+   // POST /kag-search
+   interface SearchRequest {
+     query: string;
+     top_k: number;
+   }
 
-## Deploy on Vercel
+   interface SearchResult {
+     content: string;
+     vector_score: number;
+     text_score: number;
+     combined_score: number;
+     doc_id: number;
+     entities: Array<{
+       name: string;
+       type: string;
+       description: string;
+     }>;
+   }
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+2. **Knowledge Base Stats**
+   ```typescript
+   // GET /kbdata
+   interface KBStats {
+     total_documents: number;
+     total_chunks: number;
+     total_entities: number;
+     total_relationships: number;
+     documents: DocumentStats[];
+     last_updated: string;
+   }
+   ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+3. **Graph Data**
+   ```typescript
+   // GET /graph-data
+   interface GraphData {
+     nodes: GraphNode[];
+     links: GraphLink[];
+   }
+   ```
+
+## Deployment
+
+### Railway Deployment
+
+1. **Connect Repository**
+   - Link your GitHub repository to Railway
+   - Select the frontend directory as the source
+
+2. **Configure Build**
+   ```bash
+   # Build command
+   pnpm install && pnpm build
+
+   # Start command
+   pnpm start
+   ```
+
+3. **Environment Variables**
+   Add to Railway dashboard:
+   - `NEXT_PUBLIC_API_URL`
+   - `NEXT_PUBLIC_API_KEY`
+
+### Manual Build
+
+```bash
+# Production build
+pnpm build
+
+# Start production server
+pnpm start
+```
+
+## Development
+
+### Code Structure
+
+```
+frontend/
+├── app/              # Next.js app router pages
+├── components/       # React components
+│   ├── KnowledgeGraph.tsx    # Graph visualization
+│   ├── SearchForm.tsx        # Search interface
+│   └── ...
+├── utils/           # Utility functions
+│   └── api.ts       # API client
+└── public/          # Static assets
+```
+
+### Key Components
+
+- `KnowledgeGraph`: Force-directed graph visualization
+- `SearchForm`: Search interface with AI responses
+- `NavHeader`: Navigation and layout component
+- `ProcessingStatus`: Upload progress tracking
+
+### Styling
+
+- Tailwind CSS for styling
+- Custom theme configuration in `tailwind.config.ts`
+- Responsive design with mobile-first approach
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.

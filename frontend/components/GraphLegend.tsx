@@ -13,7 +13,7 @@ export default function GraphLegend({ categories, onCategoryToggle, activeCatego
     <div className="absolute top-4 right-4 bg-white/90 p-4 rounded-lg shadow-md backdrop-blur-sm">
       <h3 className="text-sm font-semibold mb-2">Entity Types</h3>
       <div className="space-y-2">
-        {categories.map((category, index) => (
+        {categories.map((category) => (
           <button
             key={category}
             onClick={() => onCategoryToggle(category)}
@@ -23,7 +23,7 @@ export default function GraphLegend({ categories, onCategoryToggle, activeCatego
           >
             <span
               className="w-3 h-3 rounded-full"
-              style={{ backgroundColor: categoryColors[index % categoryColors.length] }}
+              style={{ backgroundColor: categoryColors[category] || categoryColors['Default'] }}
             />
             <span className="text-sm">{category}</span>
           </button>
