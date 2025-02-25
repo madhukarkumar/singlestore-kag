@@ -1,4 +1,4 @@
-# SingleStore Prime Radian
+# SingleStore Prime Radiant
 
 A full-stack application that processes documents to create semantic embeddings and knowledge graphs using OpenAI and Google's Gemini AI models. The system uses SingleStore for storing and querying vector embeddings, document content, and knowledge graph relationships.
 
